@@ -1,5 +1,27 @@
 <?php
 
+function db_filesafe($dir=null, $name='media', $view=false) {
+	$db = db_init();
+	global $known_fs;
+	global $db_conf;
+	if ($known_fs != null) return $known_fs;
+	if (!$db_conf) { $db_conf = array(); }
+	if (isset($dir)) $db_conf['fs_dir'] = $dir;
+	if (isset($name)) $db_conf['fs_name'] = $name;
+	if (isset($view)) $db_conf['fs_view'] = $view;
+	if (!isset($db_conf['fs_dir'])) {	global $fs_dir;
+		$db_conf['fs_dir'] = $fs_dir;
+	}
+	if (!isset($db_conf['fs_name'])) {	global $fs_name;
+		$db_conf['fs_name'] = $fs_name;
+	}
+	if (!isset($db_conf['fs_view'])) {	global $fs_view;
+		$db_conf['fs_view'] = $fs_view;
+	}
+	$known_fs = new FileSafe($db, $db_conf);
+	return $known_fs;
+}
+
 function ms_mime($path, $suggested='application/force-download') {
 	if (function_exists('finfo_file')) {
 		$finfo = finfo_open(FILEINFO_MIME);
@@ -21,13 +43,14 @@ class FileSafe extends db_PDO {
 	private $table_files, $table_stats, $table_links, $view_table = null;
 
 	function __construct($conf, $conf2=null) {
-		if (is_object($conf) && is_subclass_of($conf, "db_PDO")) {
+		if (is_object($conf) && is_subclass_of($conf, "db_PDO") || $conf instanceof db_PDO) {
 			$this->db = $conf;
 			$conf = $conf2;
 		} else {
 			parent::__construct($conf);
 			$this->db = $this;
 		}
+		$this->pdo = $this->db->pdo;		
 		if (!is_array($conf)) throw new Exception ('Passed argument is not a config array.');
 		$lazy = array('fs_dir', 'fs_name', 'fs_view');
 		foreach ($lazy as $lazy_one) if (!isset($conf[$lazy_one])) throw new Exception ('No [' .$lazy_one . '] index in array passed as FileSafe config!');
@@ -84,7 +107,7 @@ class FileSafe extends db_PDO {
 		$path = $base;
 		foreach ($apath as $dir) {
 			$path .= '/'.$dir;
-			echo "Checking $path \n";
+			//echo "Checking $path \n";
 			if (!is_dir($path)) {
 				mkdir($path);
 				chmod($path, 0777);
@@ -102,7 +125,7 @@ class FileSafe extends db_PDO {
 		$this->rdir($vpath);
 		
 		$id = $this->insert($file, $vpath, $sname);
-		echo "ID: $id \n";
+		//echo "ID: $id \n";
 	}
 	private function insert($file, $vpath, $title, $desc='') {
 		if ($file == 'folder/0') throw new Exception('wtf?');
@@ -118,8 +141,8 @@ class FileSafe extends db_PDO {
 		$hash = md5_file($file);
 		$size = filesize($file);
 		$mime = ms_mime($file);
-		echo "<li>full file: $file";
-		echo "<li>need to insert file $basename -- $hash || $vpath ";
+		//echo "<li>full file: $file";
+		//echo "<li>need to insert file $basename -- $hash || $vpath ";
 		$dup = $this->db->get("SELECT id, path FROM ".$this->table_files." WHERE hash = ? AND path = ? LIMIT 1", $hash, $vpath.($vpath?'/':''));
 
 		if ($dup) return $dup[0]['id'];
@@ -143,11 +166,10 @@ class FileSafe extends db_PDO {
 			$n_id = $this->set("INSERT INTO ".$this->table_links.
 				" (file_id, stat_id, depth) VALUES (?,?,?)",
 				$id, $stat_id, $depth);
-				echo "<li>Inserted $n_id</li>";
+				//echo "<li>Inserted $n_id</li>";
 		}
 
-		echo "<li> Now insert all links</li>";
-		print_r($apath);
+		//echo "<li> Now insert all links</li>";	print_r($apath);
 
 		return $id;
 	}
@@ -159,14 +181,14 @@ class FileSafe extends db_PDO {
 				$whereString = preg_replace('#(\w+?)\s+?(=|>=)#', 'f.'.'\1 \2', $whereString);
 			}
 			$query = 
-				'SELECT '.$fields .' FROM safetest_main_files f '.
-				'JOIN safetest_main_links l ON f.id = l.file_id '.
-				'JOIN safetest_main_stats s ON l.stat_id = s.id '.
+				'SELECT '.$fields .' FROM '.$this->table_files.' f '.
+				'JOIN '.$this->table_links.' l ON f.id = l.file_id '.
+				'JOIN '.$this->table_stats.' s ON l.stat_id = s.id '.
 				$whereString;
 		} else
 		if ($this->view_table) {
 			$query = 
-				'SELECT * FROM safetest_main_files '.
+				'SELECT * FROM '.$this->table_files.' '.
 				$whereString;
 		}
 		return $query;
@@ -226,15 +248,26 @@ class FileSafe extends db_PDO {
 
 		return $this->delete($this->findPath($path, $recursive));
 	}
+	public function ls($path, $recursive=FALSE) {
+		$ids = $this->findPath($path, $recursive);
+		if ($ids) {
+			$query = $this->select_sql('WHERE id IN ('.join(',', $ids).')');
+			$sql = array($query => $data);
+
+			$tmp = $this->fetch($sql);
+			print_r($tmp);	
+		} 
 	
+	}
+
+
 	public function unix_sync($start='') {
 		$files = array();
 		$this->unix_syncV($start, 0, $files);
-		echo "<hr>";
-		print_r($files);
+		//echo "<hr>";print_r($files);
 	}
 	public function clean_db($vpath='') {
-		echo "GOTTA CLEAN DB ".$vpath."\n";
+		//echo "GOTTA CLEAN DB ".$vpath."\n";
 		srand();
 		$max = $this->get("SELECT COUNT(id) as num FROM ".$this->table_files." WHERE path LIKE ?", $vpath.'/%');
 		$num = $max[0]['num'];
@@ -255,8 +288,7 @@ class FileSafe extends db_PDO {
 	}
 	public function unix_syncV($vpath, $max, &$files) {
 
-		echo "<li>Entering `$vpath`</li>";
-		echo "<ul>";
+		//echo "<li>Entering `$vpath`</li>";echo "<ul>";
 		echo "SELECT *, UNIX_TIMESTAMP(mtime) as mtime FROM ".$this->table_stats." WHERE path LIKE ?", $vpath.($vpath?'/':'').'%';
 		$stats = $this->get("SELECT *, UNIX_TIMESTAMP(mtime) as mtime FROM ".$this->table_stats." WHERE path LIKE ?", $vpath.($vpath?'/':'').'%');
 		$nstats = array();
@@ -277,10 +309,10 @@ class FileSafe extends db_PDO {
 		$test_file = $tmp_file;
 		touch($test_file, $ttime);//$nstats[$vpath]);
 		$f = 'find '.$root.'/'.$vpath." -newer ".$test_file.' -printf "%T@\t%p\n"';
-		echo "<li><u>$f </u>".date("Y-m-d H:i:s", $ttime);
+		//echo "<li><u>$f </u>".date("Y-m-d H:i:s", $ttime);
 		$cfiles = array();
 		$p = popen($f, 'r');
-		echo "<ul>CHANGES SINCE $ttime:";
+		//echo "<ul>CHANGES SINCE $ttime:";
 		while (!feof($p)) {
 			$f = fgets($p,1024);
 			if (!strlen($f)) {
@@ -293,18 +325,18 @@ class FileSafe extends db_PDO {
 			if ($z === 0) $z = '';
 			$cfiles[$z] = $v[0];
 		}
-		echo "</ul>";
+		//echo "</ul>";
 		pclose($p);
-		echo "</ul>";
-		echo "Merging changes:\n";
-		print_r($cfiles);
-		echo "<ul>";
+		//echo "</ul>";
+		///echo "Merging changes:\n";
+		//print_r($cfiles);
+		//echo "<ul>";
 		$dirs = array();
 		foreach ($cfiles as $vname=>$mtime) {
 			if ($vname === 0) $vname='';
-			echo "<li>What is $vname";
+			//echo "<li>What is $vname";
 			if (is_dir($this->dir.'/'.$vname)) {
-				echo "<li>Remembering dir $vname";
+				//echo "<li>Remembering dir $vname";
 				$dirs[$vname] = 2;
 				$xtime = filemtime($this->dir.'/'.$vname);
 				if (!isset($newmax[$vname])) $newmax[$vname] = 0;
@@ -313,7 +345,7 @@ class FileSafe extends db_PDO {
 				$xpath = dirname($vname);
 				if ($xpath == '.') $xpath = '';
 				$file = basename($vname);
-				echo "<li>Doing file $file | $xpath <li>";
+				//echo "<li>Doing file $file | $xpath <li>";
 				$xtime = filemtime($this->dir.'/'.$vname);
 				if (!isset($newmax[$xpath])) $newmax[$xpath] = 0;
 				$newmax[$xpath] = max($newmax[$xpath], $xtime);
@@ -322,7 +354,7 @@ class FileSafe extends db_PDO {
 				$id = $this->insert($this->dir.'/'.$vname, $xpath, '');
 			}
 		}
-		print_r($newmax);
+		//print_r($newmax);
 		foreach ($dirs as $vname=>$typ) {
 			$prev = $vname;
 			if (!isset($newmax[$vname])) continue;
@@ -330,22 +362,22 @@ class FileSafe extends db_PDO {
 				if ($prev == '.') $prev = '';
 				if (!isset($newmax[$prev])) $newmax[$prev] = 0;
 				$newmax[$prev] = max($newmax[$prev], $newmax[$vname]);
-				echo "\nSAVING IN $prev -- {$newmax[$prev]}\n";
+				//echo "\nSAVING IN $prev -- {$newmax[$prev]}\n";
 			}
 			if ($typ == 2) $this->clean_db($vname);
 		}		
 		
 		$this->update_stats($newmax, $nstats);
-		echo "</ul>";
+		//echo "</ul>";
 
 	}
 
 	private function update_stats($stat_table, &$nstats) {
-		echo "<ul style='background:red;'>";
-		echo "<li>SAVING";
-		print_r($stat_table);
-		print_r($nstats);
-		echo "\n";
+		//echo "<ul style='background:red;'>";
+		//echo "<li>SAVING";
+		//print_r($stat_table);
+		//print_r($nstats);
+		//echo "\n";
 		$max = 0;
 		foreach ($stat_table as $vname=>$xtime) {
 			$savepath = $vname.($vname?'/':'');
@@ -358,7 +390,7 @@ class FileSafe extends db_PDO {
 			$max = max($xtime, $max);
 			$nstats[$vname] = $max;
 		}
-		echo "</ul>";
+		//echo "</ul>";
 		return $max;
 	}
 	
@@ -376,7 +408,7 @@ class FileSafe extends db_PDO {
 		foreach ($files as $vname=>$xtime) {
 			$xpath = dirname($vname);
 			$file = basename($vname);
-			echo "<li>Doing file $file | $xpath ";
+			//echo "<li>Doing file $file | $xpath ";
 			$xname = $this->dir.'/'.$vpath.'/'.$file;
 			$xtime = filemtime($this->dir.'/'.$vname);
 			if (!isset($newmax[$xpath])) $newmax[$xpath] = 0;
@@ -400,10 +432,10 @@ class FileSafe extends db_PDO {
 	}
 	public function rec_sync($vpath, &$nstats, &$files, &$dirs) {
 		
-		echo "<li>Entering `$vpath`</li>";
-		echo "<ul>";
+		//echo "<li>Entering `$vpath`</li>";
+		//echo "<ul>";
 
-		echo "stats:"; print_r($nstats);
+		//echo "stats:"; print_r($nstats);
 		
 		$min = $max = (isset($nstats[$vpath]) ? $nstats[$vpath] : 0);
 		
@@ -412,10 +444,10 @@ class FileSafe extends db_PDO {
 		foreach ($cfiles as $file) {
 			if ($file == '.' || $file == '..') continue;
 			$vname = $vpath.($vpath?'/':'').$file;
-			echo "<li>Comparing $vname";	
+			//echo "<li>Comparing $vname";	
 			$xname = $this->dir.'/'.$vpath.($vpath?'/':'').$file;
 			$xtime = filemtime($xname);
-			echo "[ $xname | $xtime | $min ]";
+			//echo "[ $xname | $xtime | $min ]";
 			if (is_dir($xname)) {
 				if ($xtime > $min) $dirs[$vname] = $xtime;
 				$xtime = $this->rec_sync($vpath.($vpath?'/':'').$file, $nstats, $files, $dirs);
@@ -424,7 +456,7 @@ class FileSafe extends db_PDO {
 			}
 			$max = max($max, $xtime);
 		}
-		echo "</ul>";
+		//echo "</ul>";
 		if ($min < $max) {
 			if (!isset($dirs[$vpath])) $dirs[$vpath] = 0;
 			$dirs[$vpath] = max($max, $dirs[$vpath]);
