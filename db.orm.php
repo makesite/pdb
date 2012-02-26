@@ -96,9 +96,13 @@ class ORM extends SINGLETON {
 		//public function sync_table($table_name, $values) {
 		foreach ( get_declared_classes() as $c ) {
 			if (!is_subclass_of($c, 'ORM_Model')) continue;
+			/*if (is_callable(array($c, 'SYNC'))) {
+				$f = new $c;
+				call_user_func(array($f, 'SYNC'), $db);
+				continue;
+			}*/
 			$class_table = self::getTable($c);
 			$ref = self::get_reflection($c);
-			
 			$db->sync_table($class_table, $ref['fields']);
 		}
 
@@ -197,86 +201,13 @@ class ORM extends SINGLETON {
 
 		} else {
 			$obj = new $name;
-			
+
 		}
 		return $obj;
 	}
 
-	function Insert($object) {
+	function Wrap($object) {
 		$class = get_class($object);
-		_debug_log("Inserting Class: $class");
-		$ref = self::get_reflection($class, $tmp, $object);
-		//print_r($ref);	exit;
-
-		if (isset($class::$has_one)) {
-		foreach ($class::$has_one as $name => $config) {
-			//echo "<hr>";
-			if ($config === true) {
-				$config = array($name);
-			}
-			if (isset($config[0])) $subclass = $config[0];
-			else list($subclass) = each($config);
-
-			$ref2 = self::get_reflection($subclass);
-			$table = $ref2['table'];
-
-			if (isset($ref['foreign'][$table])) {
-				list( $field, $subfield ) = each ( $ref['foreign'][$table] );
-				//echo "field: $field, fix: $subfield";
-			} else {
-				// pull key name out of nothing
-				if (isset($config[$subclass])) {
-					$field = $config[$subclass];
-				} else
-				$field = strtolower($subclass).'_id';
-				$subfield = $ref2['primary']; 
-			}
-			//echo "Must have a field $name of subclass $subclass with field $subfield to populate var $field";
-			if (isset($object->$name) && is_object($object->$name)) {
-				$subobj =& $object->$name;
-			 	if (strtolower(get_class($subobj)) == strtolower($subclass)) {
-			 		$object->$field = $subobj->$subfield;
-			 	}
-			}
-			//$object->$field = 
-		} }
-
-		$vals = array();
-		$keys = array();
-		foreach ($ref['fields'] as $name => $sql) {
-			if ($name == $ref['primary']) continue;
-			$vals[] = $object->$name;
-			$keys[] = $name;
-		}
-		/*
-		foreach ($ref['foreign'] as $table => $foreign) {
-			foreach ($foreign as $local_name => $remote_name) {
-				$keys[] = $local_name;
-				$val = 0;
-				$cls = class_by_table($table);
-				if ($object->
-				$vals[] = $val;
-			}
-		}*/
-		$q = new QRY();
-		$q->INSERT($keys);//array_keys($ref['fields']));
-		//$q->INSERT();
-		$q->INTO(self::getTable($class));
-		$q->VALUES($vals);
-		
-		$db = self::getDB();
-
-		$new_id = $db->set ( $q->toRun() );
-
-		$this->identify( $new_id );
-	}
-
-function Update($object) {
-		$class = get_class($object);
-		_debug_log("Updating Class: $class");
-		$ref = self::get_reflection($class, $tmp, $object);
-		//print_r($ref);	exit;
-
 		if (isset($class::$has_one)) {
 		foreach ($class::$has_one as $name => $config) {
 			//echo "<hr>";
@@ -306,7 +237,76 @@ function Update($object) {
 			 	}
 			}
 			//$object->$field = 
+			//$object->$name = null;
 		} }
+
+	}
+
+	function Insert($object) {
+		$class = get_class($object);
+		_debug_log("Inserting Class: $class");
+		$ref = self::get_reflection($class, $tmp, $object);
+		//print_r($ref);	exit;
+
+		ORM::Wrap($object);
+
+
+		$vals = array();
+		$keys = array();
+		foreach ($ref['fields'] as $name => $sql) {
+			if ($name == $ref['primary']) continue;
+			$vals[] = $object->$name;
+			$keys[] = $name;
+		}
+		/*
+		foreach ($ref['foreign'] as $table => $foreign) {
+			foreach ($foreign as $local_name => $remote_name) {
+				$keys[] = $local_name;
+				$val = 0;
+				$cls = class_by_table($table);
+				if ($object->
+				$vals[] = $val;
+			}
+		}*/
+		$q = new QRY();
+		$q->INSERT($keys);//array_keys($ref['fields']));
+		//$q->INSERT();
+		$q->INTO(self::getTable($class));
+		$q->VALUES($vals);
+		
+		$db = self::getDB();
+
+		$new_id = $db->set ( $q->toRun() );
+
+		$this->identify( $new_id );
+		
+		return $new_id;
+	}
+
+function Delete($object) {
+	$class = get_class($object);
+	_debug_log("Deleting Class: $class");
+
+		$ref = self::get_reflection($class, $tmp, $object);
+		$q = new QRY();
+		$q->DELETE();
+		$q->FROM(self::getTable($class));
+		$q->WHERE(array($ref['primary']));
+		$q->DATA(array($ref['primary']=>$this->id()));
+
+		$db = self::getDB();
+
+		$db->set ( $q->toRun() );
+
+}
+
+function Update($object) {
+		$class = get_class($object);
+		_debug_log("Updating Class: $class");
+		$ref = self::get_reflection($class, $tmp, $object);
+		//print_r($ref);	exit;
+
+		ORM::Wrap($object);
 
 		$vals = array();
 		$keys = array();
@@ -407,8 +407,6 @@ function Update($object) {
 		return self::$static_cache[$class_name];
 	}
 
-
-
 }
 
 class ORM_Collection implements Iterator, Countable, ArrayAccess {
@@ -494,6 +492,11 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	public function one() {/* new*/
 		if ($this->valid()) return $this->current();
 		return false;
+	}
+	
+	public function delete() {
+		if (!$this->id()) throw new Exception("Can't delete from unloaded ORM_Collection");
+		foreach ($this->data as $item) $item->delete();
 	}
 
 	public function reset() {
@@ -582,8 +585,10 @@ class ORM_Model {
 		if (isset($class::$has_many)) {
 			foreach ($class::$has_many as $name => $config) {
 				//_debug_log("Has many $name: -- {$config[0]}");
-				//echo "Filter is ";//.print_r($config,1);
-				$ref = ORM::get_reflection($config[0]);
+				//echo "Filter is ".print_r($config,1);
+				if (isset($config[0])) $has_class = $config[0];
+				else list($has_class) = each($config);  
+				$ref = ORM::get_reflection($has_class);
 				//print_r($ref);
 				
 				$table = $this->reflection()->table;
@@ -596,7 +601,7 @@ class ORM_Model {
 				}
 				if ($filter) {
 					//_debug_log('filter:`'.print_r($filter,1).'`');
-					$this->$name = new ORM_Collection($config[0], $filter);
+					$this->$name = new ORM_Collection($has_class, $filter);
 				} else {
 					$this->$name = null;
 				}				
@@ -608,9 +613,9 @@ class ORM_Model {
 				//_debug_log("Has one $name");
 				if ($config === true) $config = array(0=>$name);
 				if (isset($config[0])) $has_class = $config[0];
-				else list($has_class) = each($config);
+				else list($has_class, $nn) = each($config);
 				//echo "Making $has_class";
-				$nn = $name.'_id';
+				if (!isset($nn) || !isset($this->$nn)) $nn = $name.'_id';
 				if (isset($this->$nn)) {
 					//_debug_log($nn ."=". $this->$nn);
 					$this->$name = ORM::Model($has_class, $this->$nn);
@@ -625,17 +630,17 @@ class ORM_Model {
 		//_debug_log("</ul>");
 	}
 
-	private function autofields() {
+	protected function autofields() {
 		$class = get_class($this);
 		if (isset($class::$_auto)) {
 			foreach ($class::$_auto as $name => $config) {
 				if (is_callable(array($this, $name.'_auto'))) {
-						$fnc = $name.'_auto';
-						$this->$name = $this->$fnc();
-				} 
+					$fnc = $name.'_auto';
+					$this->$name = $this->$fnc();
+				}
 				else if (is_string($config)) {
 					$this->$name = str_replace('*', $this->id(), $config);
-				} 
+				}
 				else {
 					$this->$name = $config;
 				}
@@ -643,15 +648,68 @@ class ORM_Model {
 		}
 	}
 
+	private function add_has_many_via() {
+		$class = get_class($this);
+		if (isset($class::$has_many_via)) {
+			foreach ($class::$has_many_via as $name => $config) {
+				//echo "Has many $name via: -- {$config}<br>";
+				$has_class = key($config);
+				$via_class = $config[$has_class][0]; 
+				$local_field = $config[$has_class][1]; 
+				$remote_field = $config[$has_class][2];
+				$remote_hasmany = $config[$has_class][3];
+				if (isset($via_class::$has_many) &&
+					isset($via_class::$has_many[$remote_hasmany])) {
+					$ref = ORM::get_reflection($has_class);
+					//echo "<pre>";print_r($ref);echo "</pre>";
+					/* Now, we use local_field to find appropriate MIDDLE entries */
+					$filter = array($remote_field => $this->$local_field);
+					/* And setup next filter based on it */
+					$link = ORM::Collection($via_class, $filter)->one();
+					
+					if ($link) {
+						$table = $this->reflection()->table;
+						
+						$config = $via_class::$has_many[$remote_hasmany];
+						if (isset($config[0])) $last_class = $config[0];
+						else list($last_class) = each($config);  
+
+						$ref3 = ORM::get_reflection($via_class);
+						$ref2 = ORM::get_reflection($last_class);
+						//echo "<pre>";print_r($ref2);echo "</pre>";
+
+						$table = $ref3['table'];
+						$filter = null;
+						//echo "Table is $table";
+						if (isset($ref2['foreign'][$table])) {
+							list ($my_key, $his_key) = each ( $ref2['foreign'][$table] );
+							$filter = $my_key ." = " . $link->$his_key;
+							//$filter = array($my_key => $link->$his_key);
+						}
+						//echo "<hr>Setting last collection:<pre>";
+						//_debug_log('filter:`'.print_r($filter,1).'`');
+						$this->$name = new ORM_Collection($last_class, $filter);
+						//print_r($this->$name);	echo "</pre>";
+					} else
+						$this->$name = array();//YUCK
+				}
+			}
+			//unset($this->has_many_via);
+		}
+	}
+
 	public function assemble() {
 		$this->autofields();
+		$this->add_has_many_via();
 		//_debug_log("<li>Assembling <b>" . get_class($this) . "</b><ul>");
 		$class = get_class($this);
 		if (isset($class::$has_many)) {
 			foreach ($class::$has_many as $name => $config) {
 				//echo "Has many $name: -- {$config[0]}<br>";
 				//echo "Filter is ".print_r($config,1);
-				$ref = ORM::get_reflection($config[0]);
+				if (isset($config[0])) $has_class = $config[0];
+				else list($has_class) = each($config); 
+				$ref = ORM::get_reflection($has_class);
 				//echo "<pre>";print_r($ref);echo "</pre>";
 				
 				$table = $this->reflection()->table;
@@ -662,7 +720,7 @@ class ORM_Model {
 					//$filter = array($my_key => $this->$his_key);
 				}
 				//_debug_log('filter:`'.print_r($filter,1).'`');
-				$this->$name = new ORM_Collection($config[0], $filter);				
+				$this->$name = new ORM_Collection($has_class, $filter);				
 			}
 			unset($this->has_many);
 		}
@@ -671,8 +729,9 @@ class ORM_Model {
 				//_debug_log("Has one $name");
 				if ($config === true) $config = array(0=>$name);
 				if (isset($config[0])) $has_class = $config[0];
-				else list($has_class) = each($config);
-				$nn = $name.'_id';
+				else list($has_class, $nn) = each($config);
+				//list($nn) = each(current($config));
+				if (!isset($nn) || !isset($this->$nn)) $nn = $name.'_id'; 
 				if (isset($this->$nn)) {
 					//_debug_log($nn ."=". $this->$nn);
 					$this->$name = ORM::Model($has_class, $this->$nn);
@@ -680,9 +739,10 @@ class ORM_Model {
 				}
 				//$this->$nn = $this->$name->id;//'xxx';
 			}
-			unset($this->has_one);
+			//unset($this->has_one);
 		}
 		//_debug_log("</ul>");
+	
 	}
 
 	public function load() {
@@ -700,6 +760,10 @@ class ORM_Model {
 	public function save() {
 		if ($this->id()) return $this->update();
 		else return $this->insert();
+	}
+
+	public function delete() {
+		return ORM::Delete($this);
 	}
 
 	public function internal_reflection() {
