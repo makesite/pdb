@@ -23,13 +23,19 @@ function db_filesafe($dir=null, $name='media', $view=false) {
 }
 
 function ms_mime($path, $suggested='application/force-download') {
-	if (function_exists('finfo_file')) {
+	if (function_exists('mime_content_type')) {
+		$mtype = mime_content_type($path);
+  	}
+	else if (function_exists('finfo_file')) {
 		$finfo = finfo_open(FILEINFO_MIME);
 		$mtype = finfo_file($finfo, $path);
-		finfo_close($finfo);
-	} else if (mime_content_type('finfo_file')) {
-		$mtype = mime_content_type($path);
-	}
+		finfo_close($finfo);  
+  	}
+  	else $mtype = $suggested;
+  	if (preg_match('/\.png$/i', $path)) $mtype = 'image/png';
+  	if (preg_match('/(\.jpg|\.jpeg)$/i', $path)) $mtype = 'image/jpeg';
+  	if (preg_match('/\.gif$/i', $path)) $mtype = 'image/gif';
+	if ($mtype == '') $mtype = "application/force-download";
 	return ($mtype ? $mtype : $suggested);
 }
 
@@ -52,13 +58,13 @@ class FileSafe extends db_PDO {
 		}
 		$this->pdo = $this->db->pdo;		
 		if (!is_array($conf)) throw new Exception ('Passed argument is not a config array.');
-		$lazy = array('fs_dir', 'fs_name', 'fs_view');
+		$lazy = array('fs_dir', 'fs_name', 'fs_view','prefix');
 		foreach ($lazy as $lazy_one) if (!isset($conf[$lazy_one])) throw new Exception ('No [' .$lazy_one . '] index in array passed as FileSafe config!');
 		$this->dir = $conf['fs_dir'];
 		$this->name = $conf['fs_name'];
-		$this->table_files = '#__'.$this->name.'_files';
-		$this->table_stats = '#__'.$this->name.'_stats';
-		$this->table_links = '#__'.$this->name.'_links';
+		$this->table_files = $conf['prefix'].$this->name.'_files';
+		$this->table_stats = $conf['prefix'].$this->name.'_stats';
+		$this->table_links = $conf['prefix'].$this->name.'_links';
 		if ($conf['fs_view']) $this->view_table = '#__'.$this->name.'_view';
 		if (!file_exists($this->dir.'/write.test') || 1) {
 			if (!$this->make_tables()) throw new Exception("Unable to create tables");
@@ -105,6 +111,7 @@ class FileSafe extends db_PDO {
 		if (!$apath) throw new Exception("Must provide a path");
 		$base = $this->dir;
 		$path = $base;
+		var_dump($apath);
 		foreach ($apath as $dir) {
 			$path .= '/'.$dir;
 			//echo "Checking $path \n";
@@ -120,15 +127,28 @@ class FileSafe extends db_PDO {
 		if (sizeof($arr) < 2) return false;
 		return $arr[sizeof($arr)-1];
 	}
-	public function add($file, $vpath, $sname='') {
+	public function add($file, $vpath, $sname='', $desc='') {
 		if (!is_array($vpath)) $vpath = preg_split('#/|\.#', $vpath, -1, PREG_SPLIT_NO_EMPTY);
 		$this->rdir($vpath);
-		
-		$id = $this->insert($file, $vpath, $sname);
+
+		$id = $this->insert($file, $vpath, $sname, $desc);
 		//echo "ID: $id \n";
 	}
-	private function insert($file, $vpath, $title, $desc='') {
-		if ($file == 'folder/0') throw new Exception('wtf?');
+	public function upload($FILE, $vpath, $sname='', $desc='') {
+		if (!is_array($FILE)) throw new Exception("Argument 1 must be php $_FILES element");
+		if ($FILE['error']) return 'PHP Upload error #'.$FILE['error'];
+		$apath = preg_split("#/#", $vpath);
+		$id = $this->insert($FILE['tmp_name'], $apath, $sname, $desc, $FILE['name'], $FILE['type']);
+		//echo $id;	print_r($FILE);
+		if ($id) {
+			$this->rdir($apath);
+			move_uploaded_file($FILE['tmp_name'], $this->dir . '/' . $vpath . '/' . $id .'.'.
+				 $this->file_extension($FILE['name']) ); 
+		}
+		return true;  
+	}
+	private function insert($file, $vpath, $title, $desc='', $bettername='', $bettertype='') {
+		//if ($file == 'folder/0') throw new Exception('wtf?');
 		if (is_array($vpath)) {
 			$apath = $vpath;		
 			$vpath = join('/', $apath);
@@ -137,10 +157,10 @@ class FileSafe extends db_PDO {
 		}
 		if ($vpath == '.') $vpath = '';
 		//if (substr($vpath,-1) != '/') $vpath .= '/'; 
-		$basename = basename($file);
+		$basename = $bettername ? basename($bettername) : basename($file);
 		$hash = md5_file($file);
 		$size = filesize($file);
-		$mime = ms_mime($file);
+		$mime = $bettertype ? $bettertype : ms_mime($file);
 		//echo "<li>full file: $file";
 		//echo "<li>need to insert file $basename -- $hash || $vpath ";
 		$dup = $this->db->get("SELECT id, path FROM ".$this->table_files." WHERE hash = ? AND path = ? LIMIT 1", $hash, $vpath.($vpath?'/':''));
@@ -245,21 +265,37 @@ class FileSafe extends db_PDO {
 		return $ids;
 	}
 	public function deletePath($path, $recursive=FALSE) {
-
 		return $this->delete($this->findPath($path, $recursive));
+	}
+	private function deleteLink($link_id) {
+
+		$link = $this->get("SELECT * FROM ".$this->table_links." WHERE id = ?", $link_id);
+		$data = array($link_id);
+		
+		$this->set("DELETE FROM ".$this->table_links." WHERE id = ?", $link_id);
+
 	}
 	public function ls($path, $recursive=FALSE) {
 		$ids = $this->findPath($path, $recursive);
 		if ($ids) {
-			$query = $this->select_sql('WHERE id IN ('.join(',', $ids).')');
-			$sql = array($query => $data);
+			$query = $this->select_sql('WHERE s.id IN ('.join(',', $ids).')'
+			, 'f.id, f.name, f.path, f.mime, f.title, f.description, f.size, f.hash');
+			$sql = array($query => array());
 
 			$tmp = $this->fetch($sql);
-			print_r($tmp);	
+
+			return $tmp;
 		} 
-	
+		return array();
 	}
 
+	private function fastMime($path) {
+		$m = ms_mime($path);
+		if (substr($m, -3) == 'ogg' || substr($path, -3) == 'ogg') return 'audio';
+		if (substr($path, -4) == 'webm') return 'video';
+		if (substr($m, 0, 5) == 'image') return 'img';
+		return 'text';
+	}
 
 	public function unix_sync($start='') {
 		$files = array();
@@ -275,12 +311,12 @@ class FileSafe extends db_PDO {
 		$pages = round($num / $batch);
 		$page = round(rand(0, $pages-1));
 		/* Gotta process ($batch) files, starting from offset ($page * $batch) */ 
-		$bulk = $this->get("SELECT * FROM ".$this->table_files." WHERE path LIKE ? LIMIT ".$page * $batch.", ".$batch, $vpath.'/%');
+		$bulk = $this->get("SELECT f.id, f.path, f.name FROM ".$this->table_files." WHERE path LIKE ? LIMIT ".$page * $batch.", ".$batch, $vpath.'/%');
 		//echo "SELECT * FROM ".$this->table_files." WHERE path LIKE ? LIMIT ".$page * $batch.", ".$batch, $vpath.'/%';
 		$del = array();
 		foreach ($bulk as $file) {
 			if (!file_exists($this->dir.'/'.$file['path'].'/'.$file['name'])) {
-				echo "<li>no such file--".$this->dir.'/'.$file['path'].'/'.$file['name']."--";
+				//echo "<li>no such file--".$this->dir.'/'.$file['path'].'/'.$file['name']."--";
 				$del[] = round($file['id']);
 			}
 		}
