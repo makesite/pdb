@@ -61,7 +61,7 @@ function db_sync($table_name, $values) {
 
 class db_PDO {
 
-	private $pdo;
+	protected $pdo;
 	private $type;
 
 	private $report = array('queries'=>0, 'fetches'=>0);
@@ -300,11 +300,11 @@ class db_PDO {
 					if ($nv != $ov) {
 						$dnv = $nv;
 						$dov = $ov;
-						if (strpos($dnv, "AUTO_INCREMENT") === FALSE && strpos($dov, "AUTO_INCREMENT") !== FALSE) {
+						if (stripos($dnv, "AUTO_INCREMENT") === FALSE && stripos($dov, "AUTO_INCREMENT") !== FALSE) {
 							$sql[] = "ALTER TABLE " . $table . " MODIFY " . $key . " ". $nv;
 						}
 						/* Both have primary keys */
-						if (strpos($dnv, "PRIMARY KEY") !== FALSE && strpos($dov, "PRIMARY KEY") !== FALSE) {
+						if (stripos($dnv, "PRIMARY KEY") !== FALSE && stripos($dov, "PRIMARY KEY") !== FALSE) {
 							$dnv = str_replace("PRIMARY KEY", "", $dnv);
 							$dov = str_replace("PRIMARY KEY", "", $dnv);
 						}						
@@ -314,20 +314,20 @@ class db_PDO {
 							$dov = str_replace("PRIMARY KEY", "", $dnv);
 							$sql[] = "ALTER TABLE " . $table . " DROP PRIMARY KEY";
 						}
-						if (strpos($nv, "UNIQUE") === FALSE && strpos($ov, "UNIQUE") !== FALSE)
+						if (stripos($nv, "UNIQUE") === FALSE && stripos($ov, "UNIQUE") !== FALSE)
 						{
 							$dnv = str_replace("UNIQUE", "", $dnv);
 							$dov = str_replace("UNIQUE", "", $dov);
 							//$sql[] = "ALTER TABLE " . $table . " DROP UNIQUE " . $key;
 							$sql[] = "ALTER TABLE " . $table . " DROP INDEX " . $key;
 						}
-						if (strpos($nv, "INDEX") === FALSE && strpos($ov, "INDEX") !== FALSE)
+						if (stripos($nv, "INDEX") === FALSE && stripos($ov, "INDEX") !== FALSE)
 						{
 							$dnv = str_replace("INDEX", "", $dnv);
 							$dov = str_replace("INDEX", "", $dov);
 							$sql[] = "ALTER TABLE " . $table . " DROP INDEX " . $key;
 						}
-						if (strpos($nv, "INDEX") !== FALSE && strpos($ov, "INDEX") === FALSE)
+						if (stripos($nv, "INDEX") !== FALSE && stripos($ov, "INDEX") === FALSE)
 						{
 							$dnv = str_replace("INDEX", "", $dnv);
 							$dov = str_replace("INDEX", "", $dov);
@@ -335,7 +335,7 @@ class db_PDO {
 						}
 						$dnv = trim($dnv);
 						$dov = trim($dov);
-						if ($dnv != $dov) {
+						if (strtoupper($dnv) != strtoupper($dov)) {
 							$sql[] = "ALTER TABLE " . $table . " CHANGE COLUMN " . $key . " " . $key . " " . $dnv;
 						}
 					}
