@@ -208,6 +208,7 @@ class ORM extends SINGLETON {
 
 	function Wrap($object) {
 		$class = get_class($object);
+		$ref = ORM::get_reflection($class, $tmp, $object);
 		if (isset($class::$has_one)) {
 		foreach ($class::$has_one as $name => $config) {
 			//echo "<hr>";
@@ -242,19 +243,19 @@ class ORM extends SINGLETON {
 
 	}
 
-	function Insert($object) {
+	function Insert($object, $fields = array()) {
 		$class = get_class($object);
-		_debug_log("Inserting Class: $class");
+		_debug_log("Inserting object $class");
 		$ref = self::get_reflection($class, $tmp, $object);
 		//print_r($ref);	exit;
 
 		ORM::Wrap($object);
 
-
 		$vals = array();
 		$keys = array();
 		foreach ($ref['fields'] as $name => $sql) {
-			if ($name == $ref['primary']) continue;
+			if ($name == !$ref['primary']) continue;
+			if ($fields && in_array($name, $fields)) continue;
 			$vals[] = $object->$name;
 			$keys[] = $name;
 		}
@@ -273,36 +274,34 @@ class ORM extends SINGLETON {
 		//$q->INSERT();
 		$q->INTO(self::getTable($class));
 		$q->VALUES($vals);
-		
+
 		$db = self::getDB();
 
 		$new_id = $db->set ( $q->toRun() );
 
 		$this->identify( $new_id );
-		
+
 		return $new_id;
 	}
 
 function Delete($object) {
-	$class = get_class($object);
-	_debug_log("Deleting Class: $class");
-
+		$class = get_class($object);
+		_debug_log("Deleting object $class");
 		$ref = self::get_reflection($class, $tmp, $object);
 		$q = new QRY();
 		$q->DELETE();
-		$q->FROM(self::getTable($class));
+		$q->FROM($ref['table']);
 		$q->WHERE(array($ref['primary']));
 		$q->DATA(array($ref['primary']=>$this->id()));
 
 		$db = self::getDB();
 
 		$db->set ( $q->toRun() );
-
 }
 
-function Update($object) {
+function Update($object, $fields = array()) {
 		$class = get_class($object);
-		_debug_log("Updating Class: $class");
+		_debug_log("Updating object $class");
 		$ref = self::get_reflection($class, $tmp, $object);
 		//print_r($ref);	exit;
 
@@ -312,6 +311,7 @@ function Update($object) {
 		$keys = array();
 		foreach ($ref['fields'] as $name => $sql) {
 			if ($name == $ref['primary']) continue;
+			if ($fields && !in_array($name, $fields)) continue;
 			$vals[] = $object->$name;
 			$keys[] = $name;
 		}
@@ -324,7 +324,7 @@ function Update($object) {
 		$q->DATA(array($ref['primary']=>$this->id()));
 
 		$db = self::getDB();
-
+//_debug_log("ORM Save:".print_r($q->toRun(),1));
 		$db->set ( $q->toRun() );
 	}
 
@@ -461,6 +461,68 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		return $q;
 	}
 
+	public function order_using($by, $values, $reset = false) {
+		if (!$this->loaded) throw new Exception("ORDER_USING is not allowed on unloaded ORM_Collections");
+
+		/* Save field */
+		if ($reset === true) {
+			$initials = array();
+			foreach ($this->data as $item)
+	   			$initials[] = $item->{$by}; 
+		}
+
+		/* SORT */
+		array_multisort($values, SORT_DESC, $this->data);
+
+		/* Set new field */
+		if ($reset === true) {
+	   		$i = 0;
+	   		foreach ($this->data as $item) {
+	   			$item->{$by} = $initials[$i];
+	   			$i++;
+	   		}
+		}
+		if ($reset === 2) {
+	   		$i = 0;
+	   		foreach ($this->data as $item) {
+	   			$item->{$by} = $i;
+	   			$i++;
+	   		}
+		}
+	} 
+
+	public function order_by($by, $way = 'ASC', $reset = false) {
+		$way = strtoupper($way);
+		if ($this->loaded) {
+			/* Save field */
+			if ($reset) {
+				$initials = array();
+				foreach ($this->data as $item)
+		   			$initials[] = $item->{$by}; 
+			}
+			/* Actually reorder what we have */
+			$sort_func = create_function('$a, $b', 'return $a->'.$by.
+				($way == 'ASC' ? ' > ' : ' < ').'$b->'.$by.';');
+		   	usort($this->data, $sort_func);
+		   	if ($reset) {
+		   		$i = 0;
+		   		foreach ($this->data as $item) {
+		   			$item->{$by} = $initials[$i];
+		   			$i++;
+		   		}
+		   	}
+		   	return;
+		}
+		if (is_string($this->filter)) {
+			$q = new QRY();
+			$q->WHERE($this->filter);
+			$this->filter = $q;
+		}
+		if (is_object($this->filter)) {
+			$this->filter->ORDER_BY($by);//, $way); 
+		}
+	}
+
 	public function load($page = null, $quantity = null) {
 		$q = $this->create_query($this->filter);
 		//$ref = ORM::get_reflection($this->model_class);
@@ -477,7 +539,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		}
 
    		$db = ORM::getDB();
-//_debug_log("ORM collection: ".print_r($q->toRun(),1));    		
+//_debug_log("ORM collection: ".print_r($q->toRun(),1).print_r($this->filter,1));    		
   		$this->data = $db->fetchObject( $q->toRun() , $this->model_class );
 
 		$this->loaded = true;
@@ -493,10 +555,17 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		if ($this->valid()) return $this->current();
 		return false;
 	}
+
+	public function save($fields=null) {
+		if (!$this->loaded) throw new Exception("Can't save unloaded ORM_Collection");
+		$t=$ok=0; foreach ($this->data as $item) { $t++; $ok += ($item->save($fields)?1:0); }
+		return ($t == $ok ? true : false);	
+	}
 	
 	public function delete() {
-		if (!$this->id()) throw new Exception("Can't delete from unloaded ORM_Collection");
-		foreach ($this->data as $item) $item->delete();
+		if (!$this->loaded) throw new Exception("Can't delete unloaded ORM_Collection");
+		$t=$ok=0; foreach ($this->data as $item) { $t++; $ok += ($item->delete($fields)?1:0); }
+		return ($t == $ok ? true : false);
 	}
 
 	public function reset() {
@@ -745,21 +814,22 @@ class ORM_Model {
 	
 	}
 
+
 	public function load() {
 
 	}
 
-	public function update() {
-		return ORM::Update($this);
+	public function update($fields = null) {
+		return ORM::Update($this, $fields);
 	}
 
-	public function insert() {
-		return ORM::Insert($this);
+	public function insert($fields = null) {
+		return ORM::Insert($this, $fields);
 	}
 
-	public function save() {
-		if ($this->id()) return $this->update();
-		else return $this->insert();
+	public function save($fields = null) {
+		if ($this->id()) return $this->update($fields);
+		else return $this->insert($fields);
 	}
 
 	public function delete() {
@@ -774,6 +844,7 @@ class ORM_Model {
 			'primary' => null,
 			'foreign' => null,
 		);
+		return $agg;
 	}
 
 	public function reflection() {
