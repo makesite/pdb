@@ -16,6 +16,8 @@ class QRY {
 	public $params = array();	/* param: { name } */
 	public $gbsets = array();	/* group_by: { table_ref, value } */
 	public $groupbys = array();	/* group_by: { table_ref, value } */
+	public $orsets = array();	/* order_by: { table_ref, value, way } */
+	public $orderbys = array();	/* order_by: { table_ref, value, way } */
 
 	public $dsets = array();	/* datasets: */
 	public $datas = array();	/* data: */
@@ -150,6 +152,13 @@ class QRY {
 					$sep = ', ';
 				}
 				return $bit['mix'].' '.$r;					
+			case 'orderby-set':
+				$r = '';$sep = '';
+				foreach ($bit['value'] as $field) {
+					$r .= $sep.$this->evaluate($field);
+					$sep = ', ';
+				}
+				return $bit['mix'].' '.$r;					
 			default:
 				throw new Exception('Unrecognized $bit[type] ' . $bit['type']);
 			break;
@@ -157,7 +166,7 @@ class QRY {
 	}
 	private $functional = array('SELECT', 'FROM', 'WHERE', 'IN',
 	 'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'ON', 
-	 'SHOW', 'LIKE', 'DESCRIBE', 'LIMIT', 'GROUP_BY');
+	 'SHOW', 'LIKE', 'DESCRIBE', 'LIMIT', 'GROUP_BY', 'ORDER_BY');
 	public function __call($name, $argv) {
 		if (in_array(strtoupper($name), $this->functional)) {
 			if ($argv) { foreach ($argv as $arg) {
@@ -256,6 +265,20 @@ class QRY {
 		return (count($this->gbsets)-1);
 	}
 
+	private function add_orderbyset($mix=null) {
+		if (count($this->orsets) < 1) $mix = 'ORDER BY';
+		$this->orsets[] = array('type'=>'orderby-set', 'value'=>array(), 'mix'=>$mix);
+		return (count($this->orsets)-1);
+	}
+	private function add_to_orderbyset($orset=-1, $table=-1, $alias='', $way='ASC') {
+		$orid = $this->add_field($table, $alias);
+		$bit = $this->new_bit('field-ref', $orid);
+		if ($orset == -1) $orset = (count($this->orsets)-1);	
+		$this->orsets[$orset]['value'][] = $bit;
+		return (count($this->orsets)-1);
+	}
+
+
 	private function add_jointset() {
 		
 	}
@@ -289,6 +312,11 @@ $EEAT = array_shift($rset['value']);
 	private function parse_GROUP_BY($str) {
 		$gsid = $this->add_groupbyset();
 		$gid = $this->add_to_groupbyset($gsid, $str, -1); 
+	}
+
+	private function parse_ORDER_BY($str) {
+		$orid = $this->add_orderbyset();
+		$oid = $this->add_to_orderbyset($orid, $str, -1); 
 	}
 
 	private function parse_SELECT($str) {
@@ -512,7 +540,7 @@ $EEAT = array_shift($rset['value']);
 	}
 
 	public function dump() {
-		$sets = array('fsets', 'tsets', 'jsets', 'csets', 'list', 'gbsets');
+		$sets = array('fsets', 'tsets', 'jsets', 'csets', 'list', 'gbsets', 'orsets');
 		$this->jsets = ($this->joints? array(0=>array('type'=>'joint-set', 'value'=>$this->joints))
 		: array() );
 		$r = '';
