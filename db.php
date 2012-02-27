@@ -89,6 +89,9 @@ class db_PDO {
 	public function _prefix() {
 		return $this->prefix;
 	}
+	public function _report() {
+		return $this->report;
+	}
 
 	public function get() {
 		$query = func_get_arg(0);
