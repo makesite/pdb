@@ -107,7 +107,12 @@ class ORM extends SINGLETON {
 		}
 
 	}
-
+	function FixClear($class) {
+		$db = self::getDB();
+		$table = self::getTable($class);
+		_debug_log("ORM Truncatte: ".class);
+		$db->set("TRUNCATE ".$table, array());
+	}
 	function FixInsert($array) {
 		$db = self::getDB();//Ensure db is on
 		foreach ($array as $class => $entries) {
@@ -116,6 +121,7 @@ class ORM extends SINGLETON {
 				foreach ($entry as $key=>$val) {
 					$obj->$key = $val;
 				}
+				$obj->assemble();
 				$obj->save();
 				//print_r( $obj->save() );
 				//$db->run( $obj->save() );
@@ -191,7 +197,8 @@ class ORM extends SINGLETON {
 					$class_name = $params['class'];
 					$primary_key = $params['primary'];
 					$table = $params['table'];
-
+//WARNING WHEN needed key is not set...
+//if (!$arr[$params['primary']]) continue;
 					self::UpdateObjectFromArray($arr, $class_name, $primary_key, $table, TRUE);
 				} }
 
@@ -230,12 +237,23 @@ class ORM extends SINGLETON {
 					$field = strtolower($subclass).'_id';
 				$subfield = $ref2['primary']; 
 			}
+			//echo "<br>For class $class : <br>";
 			//echo "Must have a field $name of subclass $subclass with field $subfield to populate var $field";
+			/* FORCEFULLY PROTECT THE FIELD... */
+			$ok = false; 
+			//$object->$field = null;
+			//echo "<pre>Current is:".print_r($object,1);
 			if (isset($object->$name) && is_object($object->$name)) {
 				$subobj =& $object->$name;
+				//echo "<pre>".print_r($subobj,1);
 			 	if (strtolower(get_class($subobj)) == strtolower($subclass)) {
 			 		$object->$field = $subobj->$subfield;
+			 		$ok = true;
 			 	}
+			}
+			//echo "OK:".$ok.", $field:".$object->$field;
+			if (!isset($object->$field)) {
+				throw new Exception("Field `".$field."` can't be deducted for $class because it's `$name` property is NULL");
 			}
 			//$object->$field = 
 			//$object->$name = null;
@@ -254,8 +272,9 @@ class ORM extends SINGLETON {
 		$vals = array();
 		$keys = array();
 		foreach ($ref['fields'] as $name => $sql) {
-			if ($name == !$ref['primary']) continue;
+			if ($name == $ref['primary']) continue;
 			if ($fields && in_array($name, $fields)) continue;
+			if (!property_exists($object,$name)) throw new Exception("$class::$name is undefined");
 			$vals[] = $object->$name;
 			$keys[] = $name;
 		}
@@ -276,7 +295,7 @@ class ORM extends SINGLETON {
 		$q->VALUES($vals);
 
 		$db = self::getDB();
-
+//_debug_log("ORM Insert:".print_r($q->toRun() ,1));
 		$new_id = $db->set ( $q->toRun() );
 
 		$this->identify( $new_id );
@@ -290,13 +309,14 @@ function Delete($object) {
 		$ref = self::get_reflection($class, $tmp, $object);
 		$q = new QRY();
 		$q->DELETE();
-		$q->FROM($ref['table']);
+		$q->FROM(ORM::getTable($class));
 		$q->WHERE(array($ref['primary']));
 		$q->DATA(array($ref['primary']=>$this->id()));
 
 		$db = self::getDB();
+		$db->run ( $q->toRun() );
 
-		$db->set ( $q->toRun() );
+		return true;
 }
 
 function Update($object, $fields = array()) {
@@ -472,7 +492,14 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		}
 
 		/* SORT */
-		array_multisort($values, SORT_DESC, $this->data);
+		$id2index = $index_weight = array();
+		foreach ($this->data as $i=>$item)
+	   		$id2index[$item->id] = $i;
+		foreach ($values as $i=>$val)
+			$index_weight[$id2index[$val]] = $i;
+		ksort($index_weight);
+
+		array_multisort($index_weight, SORT_ASC, $this->data);
 
 		/* Set new field */
 		if ($reset === true) {
@@ -513,7 +540,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		   	}
 		   	return;
 		}
-		if (is_string($this->filter)) {
+		if (is_string($this->filter) || is_array($this->filter)) {
 			$q = new QRY();
 			$q->WHERE($this->filter);
 			$this->filter = $q;
@@ -609,7 +636,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
     		$db = ORM::getDB();
 
     		$res = $db->fetch( $q->toRun() );
-
+//_debug_log("ORM count:".print_r($q->toRun(),1).print_r($res,1));
     		if ($res) {
     			$this->counted = $res[0]['COUNT(id)'];
     		}
@@ -619,12 +646,12 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
     	return count($this->data);
     }
 	function offsetExists($offset) {
-	    if (!$this->loaded) throw new Exception("Accessing unloaded Collection");
+	    if (!$this->loaded) throw new Exception("Accessing unloaded Collection (".$this->model_class.")");
         return isset($this->data[$offset]);	
 	}
 	function offsetGet($offset) {
-		if (!$this->loaded) throw new Exception("Accessing unloaded Collection");
-		if (!isset($this->data[$offset])) throw new Exception("Accessing undefined index");
+	    if (!$this->loaded) throw new Exception("Accessing unloaded Collection (".$this->model_class.")");
+		if (!isset($this->data[$offset])) throw new Exception('Accessing undefined index `'.$offset.'` in Collection '.$this->model_class);
         return $this->data[$offset];
 	}
 	function offsetSet($offset, $set) {
@@ -659,7 +686,7 @@ class ORM_Model {
 				else list($has_class) = each($config);  
 				$ref = ORM::get_reflection($has_class);
 				//print_r($ref);
-				
+
 				$table = $this->reflection()->table;
 				$filter = null;
 				if (isset($ref['foreign'][$table])) {
@@ -673,23 +700,25 @@ class ORM_Model {
 					$this->$name = new ORM_Collection($has_class, $filter);
 				} else {
 					$this->$name = null;
-				}				
+				}
 			}
 			//unset($this->has_many);
 		}
 		if (isset($class::$has_one)) {
 			foreach ($class::$has_one as $name => $config) {
-				//_debug_log("Has one $name");
+				//_debug_log("(pre) Has one $name");
 				if ($config === true) $config = array(0=>$name);
 				if (isset($config[0])) $has_class = $config[0];
 				else list($has_class, $nn) = each($config);
 				//echo "Making $has_class";
 				if (!isset($nn) || !isset($this->$nn)) $nn = $name.'_id';
+				//_debug_log("Related field ($nn) :".$this->$nn);
 				if (isset($this->$nn)) {
-					//_debug_log($nn ."=". $this->$nn);
+					//_debug_log($nn ."=". $this->$nn. ", Unsetting $nn");
 					$this->$name = ORM::Model($has_class, $this->$nn);
 					unset($this->$nn);
 				} else{
+					//_debug_log("$class -> $name = new ORM::Model $has_class, because $nn is unset:");
 					$this->$name = ORM::Model($has_class);
 				}
 				//$this->$nn = $this->$name->id;//'xxx';
@@ -699,10 +728,11 @@ class ORM_Model {
 		//_debug_log("</ul>");
 	}
 
-	protected function autofields() {
+	protected function autofields($before_assemble) {
 		$class = get_class($this);
 		if (isset($class::$_auto)) {
 			foreach ($class::$_auto as $name => $config) {
+				if (is_bool($config) && $config != $before_assemble) continue;
 				if (is_callable(array($this, $name.'_auto'))) {
 					$fnc = $name.'_auto';
 					$this->$name = $this->$fnc();
@@ -768,7 +798,7 @@ class ORM_Model {
 	}
 
 	public function assemble() {
-		$this->autofields();
+		$this->autofields(TRUE);
 		$this->add_has_many_via();
 		//_debug_log("<li>Assembling <b>" . get_class($this) . "</b><ul>");
 		$class = get_class($this);
@@ -787,6 +817,8 @@ class ORM_Model {
 					list ($my_key, $his_key) = each ( $ref['foreign'][$table] );
 					$filter = $my_key ." = " . $this->$his_key;
 					//$filter = array($my_key => $this->$his_key);
+				} else {
+					_debug_log("Problem: class $has_class lacks a key with `FOREIGN KEY REFERENCES` ".ORM::getTable($class)." $_sql declaration");
 				}
 				//_debug_log('filter:`'.print_r($filter,1).'`');
 				$this->$name = new ORM_Collection($has_class, $filter);				
@@ -795,23 +827,24 @@ class ORM_Model {
 		}
 		if (isset($class::$has_one)) {
 			foreach ($class::$has_one as $name => $config) {
-				//_debug_log("Has one $name");
+				//_debug_log("> Has one $name".print_r($this->$name,1));
 				if ($config === true) $config = array(0=>$name);
 				if (isset($config[0])) $has_class = $config[0];
 				else list($has_class, $nn) = each($config);
 				//list($nn) = each(current($config));
-				if (!isset($nn) || !isset($this->$nn)) $nn = $name.'_id'; 
+				if (!isset($nn) || !isset($this->$nn)) $nn = $name.'_id';
 				if (isset($this->$nn)) {
 					//_debug_log($nn ."=". $this->$nn);
 					$this->$name = ORM::Model($has_class, $this->$nn);
+					//_debug_log("unsetting $nn");
 					unset($this->$nn);
-				}
+				} //else _debug_log("$nn Not set");
 				//$this->$nn = $this->$name->id;//'xxx';
 			}
 			//unset($this->has_one);
 		}
 		//_debug_log("</ul>");
-	
+		$this->autofields(FALSE);
 	}
 
 
