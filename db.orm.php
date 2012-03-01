@@ -110,7 +110,7 @@ class ORM extends SINGLETON {
 	function FixClear($class) {
 		$db = self::getDB();
 		$table = self::getTable($class);
-		_debug_log("ORM Truncatte: ".class);
+		_debug_log("ORM Truncatte: ".$class);
 		$db->set("TRUNCATE ".$table, array());
 	}
 	function FixInsert($array) {
