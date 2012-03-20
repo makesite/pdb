@@ -58,7 +58,7 @@ class ORM extends SINGLETON {
 		return $q;
 	}
 
-	function Collection($model, $filter, $load = TRUE) {
+	function Collection($model, $filter = null, $load = TRUE) {
 		$db = self::getDB();
 		$col = new ORM_Collection($model, $filter, $db);
 		if ($load) $col->load();
@@ -164,6 +164,7 @@ class ORM extends SINGLETON {
 					$joints[] = array($field => array('class'=>$class, 'primary'=>$ref2['primary'], 'table'=>$table));  
 				}
 			}
+
 /*
 			foreach ($ref['foreign'] as $table => $inno) {
 				$cname = self::class_by_table($table);
@@ -175,11 +176,11 @@ class ORM extends SINGLETON {
 			}
 */
 			$sql = $q->toRun();
-			
+
 			if (sizeof($joints) == 0) {
 
 				$obj = $db->fetchObject($sql, $name);
-				
+
 				$obj = ($obj ? $obj[0] : null);
 
 			} else {
@@ -187,7 +188,7 @@ class ORM extends SINGLETON {
 				$ok = $db->fetch($sql);//, $name);
 //print_r($ok);
 				if (!$ok) return null;
-				
+
 				$arr = $sql[$q->__toString()];
 
 				foreach ($joints as $joint) {
@@ -207,6 +208,7 @@ class ORM extends SINGLETON {
 			}
 
 		} else {
+
 			$obj = new $name;
 
 		}
@@ -346,6 +348,8 @@ function Update($object, $fields = array()) {
 		$db = self::getDB();
 //_debug_log("ORM Save:".print_r($q->toRun(),1));
 		$db->set ( $q->toRun() );
+		
+		return true;
 	}
 
 	private static function cache_add($key, $val) {
