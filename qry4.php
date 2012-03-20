@@ -378,6 +378,11 @@ $EEAT = array_shift($rset['value']);
 
 	private function parse_WHERE($str) {
 		$words = count(preg_split('/[^a-z]/i', $str));
+			if ($str == '(' || $str == ')') {//HORRIBLE HACK
+				if (!count($this->sets)) $this->add_bit('literal', 'WHERE');
+				$this->add_bit('literal', $str);
+				return;
+			}
 		if ($words > 1) {
 			//$this->add_bit('literal', 'WHERE');
 			$msid = $this->add_matchset();
@@ -452,14 +457,23 @@ $EEAT = array_shift($rset['value']);
 		$lmatch =& $this->matches[ count($this->matches) - 1];
 		$lmatch['cmp'] = $this->new_bit('literal',' ');
 		$msid = $this->add_matchset('IN', ',');
-		foreach ($argv as $name) {
-			$fid = $this->add_field($name, -1);
-			$pid = $this->add_param($name);
+
+		$name = $this->evaluate($lmatch['lvalue']);
+		$pid = $this->add_param($name);
+		foreach ($argv as $name=>$val) {
+			//$name = $val;
+			//$fid = $this->add_field($name, -1);
+			//$pid = $this->add_param($name);
 			$rvalue = array('type'=>'none', 'value'=>'none');
-			$lvalue = array('type'=>'param-ref', 'value'=>$pid);
+			//$lvalue = array('type'=>'param-ref', 'value'=>$pid);
+			//$lvalue = array('type'=>'literal', 'value'=>$val);
+			$lvalue = $lmatch['value'];
 			$cvalue = array('type'=>'literal', 'value'=>'');
 			$mid = $this->add_match($msid, $lvalue, $rvalue, $cvalue);
+
+			$this->add_data($name, $val);
 		}
+			
 		$lmatch['value'] = $this->new_bit('match-set-ref', $msid);
 		
 	}
