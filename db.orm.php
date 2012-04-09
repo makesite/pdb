@@ -1,7 +1,6 @@
 <?php
 
 require_once('db.php');
-define('TEST_QRY', 1);
 require_once('qry4.php');
 
 if (!defined('DATE_MYSQL'))  {
