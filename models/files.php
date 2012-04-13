@@ -406,6 +406,8 @@ class File extends ORM_Model {
 			}
 		}
 		else {
+			$twidth = $w;
+			$theight = $h;
 			if ($h > $w) {
 				$theight = $force_y;
 				$twidth = round($theight * $w / $h);
