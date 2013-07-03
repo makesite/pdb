@@ -5,7 +5,23 @@ global $known_db;
 
 $known_db = null;
 
-require_once('db.conf.php');
+if (!isset($db_conf))
+require_once(constant('APP_DIR').'/db.conf.php');
+
+function print_trace($trace) {
+    $out = '';
+    $i = 0;
+    foreach ($trace as $step) {
+        $name = basename(@$step['file']);
+        $line = @$step['line'];
+        $oclass = '';
+        if (isset($step['object'])) $oclass = '('.get_class($step['object']).')';
+        $func = $oclass . @$step['class'] . @$step['type'] . $step['function'];
+        $out .= '#'. $i . ' ' . $name . ':'. $line . '  '. $func. "\n";
+        $i++;
+    }
+    return $out;
+}
 
 function db_init() {
 	global $known_db;
@@ -16,7 +32,21 @@ function db_init() {
 		$db_conf = array('type'=>$db_type,'host'=>$db_host,'login'=>$db_login,
 			'pass'=>$db_pass,'base'=>$db_base, 'utf'=>$db_utf,'prefix'=>$db_prefix,'persist'=>false);
 	}
-	$known_db = new db_PDO($db_conf);
+	try {
+		$known_db = new db_PDO($db_conf);
+	} catch (PDOException $e) {
+		echo "Unable to establish a database connection.\n";
+		if (defined('DEBUG')) {
+			echo "<pre>\n";
+			echo "Error: <b>".$e->getMessage()."</b>\n";
+			echo "Type: ".$db_conf['type']."\n";
+			echo "Address: ".$db_conf['host']."\n";
+			echo "Login: ".$db_conf['login']."\n";
+			echo "Database: ".$db_conf['base']."\n";
+			echo "</pre>";
+		};
+		exit;
+	}
 	return $known_db;
 }
 
@@ -137,7 +167,7 @@ class db_PDO {
 		return $this->pdo->lastInsertId();
 	}
 
-	public function sync_table($table_name, $values) {
+	public function sync_table($table_name, $values, $dry = false) {
 		$table_name = str_replace('#__', $this->prefix, $table_name);
 		$old_values = $this->describe_table($table_name);
 		$diff = $this->diff_table($old_values, $values, $table_name, FALSE);
@@ -145,36 +175,41 @@ class db_PDO {
 		foreach ($diff as $q) {
 			$sql[$q] = null;
 		}
+		if ($dry) return $sql;
 		if ($this->batch($sql)) return $table_name;
 		else return FALSE;
 	}
 
 	/* Core API. */
-	public function fetchObject(&$sql, $name='stdClass') {
+	public function fetchObject(&$sql, $name='stdClass', $ctor_args = null) {
 		foreach($sql as $query=>$data) {
 			try {
 				$stm = $this->pdo->prepare($query);
 				$stm->execute($data);
 			$this->report['queries']++;
+			_debug_log("SQL:". $query);
 			} catch (PDOException $e) {
 				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$data) ."'" );
 			}
-			$sql[$query] =& $stm->fetchAll(PDO::FETCH_CLASS, $name);			
-		$this->report['fetches']++;		
+			$sql[$query] = $stm->fetchAll(PDO::FETCH_CLASS, $name, $ctor_args);
+		$this->report['fetches']++;
+		//static $wtf = 0;
+		//if ($wtf++) throw new Exception(	"SQL:". $query);
 		}
 		return ($query ? $sql[$query] : NULL);
 	}
 
 	public function fetch(&$sql, $mode = PDO::FETCH_ASSOC) {
 		foreach($sql as $query=>$data) {
+		_debug_log("FETCH SQL:". str_replace(array("FROM","LEFT","WHERE"), array("\nFROM", "\nLEFT", "\nWHERE"), preg_replace("#SELECT (.*?) FROM#", 'SELECT * FROM', $query)));//."|".print_trace(debug_backtrace())
 			try {
 				$stm = $this->pdo->prepare($query);
 				$stm->execute($data);
 			$this->report['queries']++;
 			} catch (PDOException $e) {
-				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$data) ."'" );
+				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . (is_array($data) ? join("','",$data) : 'X') ."'" );
 			}
-			$sql[$query] =& $stm->fetchAll($mode);
+			$sql[$query] = $stm->fetchAll($mode);
 		$this->report['fetches']++;
 		}
 		return ($query ? $sql[$query] : NULL);
@@ -187,12 +222,13 @@ class db_PDO {
 			try {
 				foreach ($datas as $k=>$data) {
 					$r = $stm->execute($data);
-					$sql[$query][$k] =& $stm->fetchAll($mode);
+					$sql[$query][$k] = $stm->fetchAll($mode);
 				}
 			} catch (PDOException $e) {
 				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$data) ."'" );
 			}
 		$this->report['fetches']++;
+		_debug_log("BATCH FETCH SQL:". $query);
 		}
 		return $stm;
 	}
@@ -207,6 +243,7 @@ class db_PDO {
 				$stm = $this->pdo->prepare($query);
 				$stm->execute($data);
 			$this->report['queries']++;
+			_debug_log("SQL:". $query  );
 				$sql[$query] =& $stm;				
 			} catch (PDOException $e) {
 				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$data) ."'" );
@@ -222,21 +259,24 @@ class db_PDO {
 		foreach($sqlb as $query=>$datas) {
 			$stm = $this->pdo->prepare($query);
 		$this->report['queries']++;#count
+		_debug_log("SQL:". $query);
 		if (is_numeric($query)) throw new Exception("NUMERIC QUERY");
 		if ($datas && !@is_array($datas[0])) throw new Exception("STRING DATA");
+			$err_data = array();//just for error reporting
 			try {
-			if ($datas)
-			foreach ($datas as $k=>$data)
-			{
-				$sqlb[$query][$k] =& $stm;
-				$r = $stm->execute($data);
-			}
-			else {
-				$sqlb[$query] =& $stm;
-				$stm->execute(NULL);
-			}
+				if ($datas)	foreach ($datas as $k=>$data)
+				{
+					$sqlb[$query][$k] =& $stm;
+					$err_data = &$data;
+					$r = $stm->execute($data);
+				}
+				else {
+					$sqlb[$query] =& $stm;
+					$stm->execute(NULL);
+				}
 			} catch (PDOException $e) {
-				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$data) ."'" );
+				$this->pdo->rollback();
+				throw new Exception( $e->getMessage() . PHP_EOL . ' ' . join(' ', $e->errorInfo) . ' in query "' . $query . '",'.PHP_EOL.' dataset '."'" . join("','",$err_data) ."'" );
 			}
 		}
 		return $this->pdo->commit();
@@ -336,6 +376,14 @@ class db_PDO {
 							$dov = str_replace("INDEX", "", $dov);
 							$sql[] = "ALTER TABLE " . $table . " ADD INDEX (" . $key. ")";
 						}
+						if (stripos($nv, "FOREIGN KEY") !== FALSE && stripos($ov, "FOREIGN KEY") === FALSE)
+						{
+							preg_match("/FOREIGN KEY (.*)$/", $dnv, $nrest);
+							preg_match("/FOREIGN KEY (.*)$/", $dov, $orest);
+							$dnv = str_replace($nrest[0], "", $dnv);
+							$dov = str_replace($orest[0], "", $dov);
+							$sql[] = "ALTER TABLE " . $table . " ADD FOREIGN KEY (" . $key. ") " . $nrest[1];
+						}
 						$dnv = trim($dnv);
 						$dov = trim($dov);
 						if (strtoupper($dnv) != strtoupper($dov)) {
@@ -362,7 +410,14 @@ class db_PDO {
 			}
 		} else { /* Create */
 			$late = array();
+			$defs = array();
 			foreach ($values as $name=>$type) {
+				if (strpos($type, 'FOREIGN KEY') !== FALSE)
+				{
+					preg_match("/FOREIGN KEY (.*)$/", $type, $rest);
+					$type = str_replace($rest[0], "", $type);
+					$late[] =  "ALTER TABLE " . $table . " ADD FOREIGN KEY (" . $name. ") ".$rest[1];
+				}
 				if (strpos($type, "INDEX") !== FALSE)
 				{
 					$type = str_replace("INDEX", "", $type);
@@ -371,7 +426,7 @@ class db_PDO {
 				$defs[] = $name . ' ' . $type;
 				$desc[$name] = $type;
 			}
-			$sql[] = "CREATE TABLE " . $table . " (" . join(', ', $defs) . ") ";
+			$sql[] = "CREATE TABLE " . $table . ($defs ? " (" . join(', ', $defs) . ") " : "");
 			$sql += $late;
 		}
 		/* Save this info */
@@ -419,6 +474,11 @@ _debug_log("ALTER-SQL:".print_r($sql,1));
 			else $nval = 'INT'.'('.max($to_size, $from_size).')';
 		}
 		return $nval.$to_rest;
+	}
+	
+	public function report() {
+		$this->report['execs'] = $this->report['queries'] - $this->report['fetches'];
+		return $this->report;
 	}
 }
 
