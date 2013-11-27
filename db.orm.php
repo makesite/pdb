@@ -1023,7 +1023,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	public function order_using($by, $values, $reset = false) {
 		if (!$this->loaded) throw new Exception("ORDER_USING is not allowed on unloaded ORM_Collections");
 		if (sizeof($this->data) != sizeof($values)) throw new Exception("Values array must have same size as the collection");
-		if ($this->data[0] && !isset($this->data[0]->{$by})) throw new Exception("Undefined field `".$by."` for class ".$this->model_class);
+		if ($this->data[0] && !property_exists($this->data[0], $by)) throw new Exception("Undefined field `".$by."` for class ".$this->model_class);
 
 		/* We must find a unique key to sort against */
 		$map = ORM::Map($this->model_class);
@@ -1036,7 +1036,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		if ($reset === true) {
 			$initials = array();
 			foreach ($this->data as $item)
-				$initials[] = $item->{$by}; 
+				$initials[] = int($item->{$by}); 
 		}
 
 		/* SORT */
@@ -1061,6 +1061,13 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 			$i = 0;
 			foreach ($this->data as $item) {
 				$item->{$by} = $i;
+				$i++;
+			}
+		}
+		if (is_string($reset)) {
+			$i = 0;
+			foreach ($this->data as $item) {
+				$item->{$reset} = $i;
 				$i++;
 			}
 		}
@@ -1126,6 +1133,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 
 			$ctx->load($this->model_class, $this->filter, $depth);
 			$this->data = $ctx->last_batch;
+
 			if (!$this->data) $this->data = $ctx->filterCache($this->model_class, $simple_filter);
 
 			if ($this->data) {
@@ -2045,8 +2053,8 @@ class ORM_Loader {
 
 			//er("<h1>Config</h1>", $config);
 			//if (!($depth < 0 || $depth > 1)) continue;
-			$link = $this->queryCache($via_class, $remote_field, $object->$local_field); 
-
+			$link = $this->queryCache($via_class, $remote_field, $object->$local_field);
+			
 			if (!$link) {
 				$filter = array($remote_field => $object->$local_field);
 				// * * *
