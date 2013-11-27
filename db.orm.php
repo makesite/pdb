@@ -134,6 +134,18 @@ class ORM extends SINGLETON {
 		return $ret;
 	}
 
+	private static function rrmdir($dir) {
+		if (!is_dir($dir)) return;
+		$objects = scandir($dir);
+		foreach ($objects as $object) {
+			if ($object == "." || $object == "..") continue;
+			if (filetype($dir."/".$object) == "dir") self::rrmdir($dir."/".$object); 
+			else unlink($dir."/".$object);
+		}
+		reset($objects); rmdir($dir);
+	}
+
+
 	public static function ExportTGZ($classes = null, $filename = 'archive-$date') {
 
 		$filename = str_replace('$date', date('DdFY-Hi'), $filename);
