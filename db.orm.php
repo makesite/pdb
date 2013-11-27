@@ -139,7 +139,7 @@ class ORM extends SINGLETON {
 		$objects = scandir($dir);
 		foreach ($objects as $object) {
 			if ($object == "." || $object == "..") continue;
-			if (filetype($dir."/".$object) == "dir") self::rrmdir($dir."/".$object); 
+			if (filetype($dir."/".$object) == "dir") self::rrmdir($dir."/".$object);
 			else unlink($dir."/".$object);
 		}
 		reset($objects); rmdir($dir);
@@ -150,7 +150,7 @@ class ORM extends SINGLETON {
 
 		$filename = str_replace('$date', date('DdFY-Hi'), $filename);
 
-		$tmp_root = sys_get_temp_dir(); 
+		$tmp_root = sys_get_temp_dir();
 		if (file_exists('tmp') && is_dir('tmp')) $tmp_root = 'tmp';
 
 		$tmp_dir =  $tmp_root.'/'. $filename.rand(0,10000).time();
@@ -171,11 +171,12 @@ class ORM extends SINGLETON {
 			$ref = ORM::get_reflection($c);
 			$file = $ref['table'].'.xml';
 			$payload = array();
-			file_put_contents($db_dir.'/'.$file, ORM::Collection($c)->toXML(null, $payload));
+			file_put_contents($db_dir.'/'.$file, ORM::Collection($c, null, 1)->toXML(null, $payload));
 			foreach ($payload as $file) {
 				$fileinfo = dirname($file['dst']);
-				if (!file_exists($payload_dir.'/'.$fileinfo))
-				mkdir($payload_dir.'/'.$fileinfo);
+				if (!file_exists($payload_dir.'/'.$fileinfo)) {
+					mkdir($payload_dir.'/'.$fileinfo, 0777, true);
+				}
 				copy($file['src'], $payload_dir.'/'.$file['dst']);
 				//er("Copy", 				$file['src'], $payload_dir.'/'.$file['dst']);
 			}			
@@ -187,24 +188,18 @@ class ORM extends SINGLETON {
 
 		if (file_exists($gz_file)) unlink($gz_file);
 		$phar->compress(Phar::GZ);
+
+		self::rrmdir($tmp_dir);
+		unlink($tar_file);
+
 		return $gz_file;
 	}
 
-	public static function ImportTGZ($filename) {
+	public static function ImportDIR($dir) {
 
-		$tmp_root = sys_get_temp_dir(); 
-		if (file_exists('tmp') && is_dir('tmp')) $tmp_root = 'tmp';
+		$db_dir = $dir . '/db';
+		$payload_dir = $dir . '/payload';
 
-		$tmp_dir = $tmp_root.'/'. str_replace('.','',basename($filename)).rand(0,10000).time();
-
-		mkdir($tmp_dir);	
-
-		$db_dir = $tmp_dir . '/db';
-		$payload_dir = $tmp_dir . '/payload';
-
-		$phar = new PharData($filename);
-		$phar->extractTo($tmp_dir); // extract all files	
-    
 		$db_files = glob($db_dir . '/*.xml');
     
 		foreach ($db_files as $db_file) {
@@ -227,20 +222,36 @@ class ORM extends SINGLETON {
 					foreach($payload as $file) {
 						$fileinfo = dirname($file['dst']);
 						if (!file_exists($fileinfo))
-							mkdir($fileinfo);
+							mkdir($fileinfo, 0777, true);
 						if (file_exists($file['dst']))
 							unlink($file['dst']);
-						if (!copy($payload_dir.'/'.$file['src'], $file['dst'])) {
+						if (!rename($payload_dir.'/'.$file['src'], $file['dst'])) {
 							//failed;
 						}
 						//er("Copy", 	$fileinfo, $payload_dir.'/'.$file['src'],			$file['dst']);					
 					}
 				}
 			}
-
 			$objects->save();
-    }
-	
+		}
+	}
+
+	public static function ImportTGZ($filename) {
+
+		$tmp_root = sys_get_temp_dir(); 
+		if (file_exists('tmp') && is_dir('tmp')) $tmp_root = 'tmp';
+
+		$tmp_dir = $tmp_root.'/'. str_replace('.','',basename($filename)).rand(0,10000).time();
+
+		mkdir($tmp_dir);
+
+		$phar = new PharData($filename);
+		$phar->extractTo($tmp_dir); // extract all files
+
+		ORM::ImportDIR($tmp_dir);
+
+		// Cleanup
+		self::rrmdir($tmp_dir);
 	}
 
 	public static function Destroy($class) {
