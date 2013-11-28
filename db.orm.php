@@ -735,6 +735,21 @@ class ORM extends SINGLETON {
 					);
 				}
 			}
+			/* If, it somehow lacks primary key, try to find a substitute */
+			$obj['edgekey'] = '';
+			$ref = ORM::get_reflection($class);
+			if (!$ref['primary']) {
+				/* If it's in a has_one relation, it's left join key should be unique */
+				foreach ($obj['autojoin'] as $puzzle) {
+					if ($puzzle['relation'] == 'master' && $puzzle['class'] != $class) {
+						$obj['edgekey'] = $puzzle['left'];
+						break;
+					}
+				}
+			} else {
+				$obj['edgekey'] = $ref['primary'];
+			}
+
 			//er("MAP FOR ", $class, $obj);
 			self::$mapping_cache[$class] = $obj;
 		}
@@ -1019,6 +1034,13 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		if (sizeof($this->data) != sizeof($values)) throw new Exception("Values array must have same size as the collection");
 		if ($this->data[0] && !isset($this->data[0]->{$by})) throw new Exception("Undefined field `".$by."` for class ".$this->model_class);
 
+		/* We must find a unique key to sort against */
+		$map = ORM::Map($this->model_class);
+		if (!$map['edgekey']) {
+			throw new Exception('Table lacks primary or a semi-unique key, can\'t `ORDER BY` with it.');
+		}
+		$primary = $map['edgekey'];
+
 		/* Save field */
 		if ($reset === true) {
 			$initials = array();
@@ -1241,23 +1263,46 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 
 		} else {
 
+			$map = ORM::Map($this->model_class);
+			if (!$map['edgekey']) {
+				throw new Exception('Table lacks primary or a semi-unique key, can\'t `UPDATE () WHERE` by it...');
+			}
+			$primary = $map['edgekey'];
+
 			$q = new QRY();
 			$q->UPDATE(ORM::getTable($this->model_class));
+
+			/* Where (X=Y) */
+			$wkeys = array();
+			if (is_array($this->filter)) {
+				foreach ($this->filter as $key=>$val) {
+					$wkeys[] = $key;
+				}
+			}
+			/* Update (X=Y) */
 			foreach ($this->data as $item) {
 				$vals = array();
 				$keys = array();
 				foreach ($ref['fields'] as $name => $sql) {
-					if ($name == $ref['primary']) continue;
+					if ($name == $primary) continue;
 					if ($fields && !in_array($name, $fields)) continue;
 					$vals[] = $item->$name;
 					$keys[] = $name;
 				}
+				if (is_array($this->filter)) {
+					foreach ($this->filter as $key=>$val) {
+						$vals[] = $val;
+					}
+				}
 				$q->VALUES($vals);
-				$q->DATA($item->id());
+				$q->DATA($item->$primary);
 			}
 			$q->SET($keys);
-			$q->WHERE(array($ref['primary']));
-
+			$q->WHERE($wkeys);
+			$q->WHERE(array($primary));
+			//er("Filter:", $this->filter);
+			//ORM_Loader::apply_filters($q, $this->filter);
+			//echo $q->visDump();
 		} //endhack
 
 		$db = ORM::getDB();
@@ -1801,74 +1846,65 @@ class ORM_Loader {
 			$tmp = array(array('ident'=>$ref['table'], 'class'=>$class, 'primary_key'=>$ref['primary'], 'name'=>NULL));
 
 			$this->PrepareJoin2($class, $q,  $depth, 0, 'master', $tmp);
-			// Prepare SQL query with multiple LEFT JOINs
-			//$this->PrepareJoinVia($class, $q, 0);
 
 			//er("Load", $class, "From", $arr, "tmp", $tmp, "Using:", $ref);
 			/* Hack -- if table doesn't have a primary key, use
 			 * right-hand link key */
-			if (!$ref['primary']) {
-				foreach ($map['autojoin'] as $puzzle) {
-					if ($puzzle['relation'] == 'master' && $puzzle['class'] != $class) {
-						$ref['primary'] = $puzzle['left'];
-						break;
-					}
-				}
+			$is_fake = false;
+			if (!$map['edgekey']) {
+				throw new Exception('Table lacks primary or semi-unique key, so can\'t `GROUP BY` or identify with it.');
+			} else if ($ref['primary'] != $map['edgekey']) {
+				$is_fake = true;
 			}
+			$ref['primary'] = $map['edgekey'];
 
 			// Change SQL query to include EVERY alias
-			$q->alias_fields = 1;
-			$q->alias_tables = 1;
 			$q->option('alias_fields', 1);
 			$q->option('alias_tables', 1);
 
 			// add group-by by original id
-			$q->GROUP_BY($ref['table'].'.'.$ref['primary'], 0);
-
+			//$q->GROUP_BY($ref['table'].'.'.$ref['primary'], 0);
 
 			/////filters
 			//$this->apply_filters($q, $filters);
 			//$q->option('named_params', 1);
-			//$q->visDump();
 
 			// Load entries
 			$sql = $q->toRun();
 			$entries = $db->fetch($sql);//, $name);
 			if (!$entries) return false;
 
-			if (defined('HEAVY_DEBUG')) er("<b><hr>TMP:",$entries,$tmp,"</b>");
 			// Break entries into objects
 			foreach ($entries as &$arr) 
 			{
-				$obj = $this->ExecJoin2($class, $arr, $tmp, $ref['table'], $ref['primary']);//, $ref['table'], $depth);
+				$obj = $this->ExecJoin2($class, $arr, $tmp, $ref['table'], $ref['primary'], $is_fake);//, $ref['table'], $depth);
 
 				//execJoin will also cache...
 				//$this->assembleOne($obj, 1);
 				$this->last_batch[] = $obj;
 			}
-			//er("<i>",$this,"</i>");
-        }
+		}
 		return true;
 	}
 
-	public function ExecJoin2($class, &$arr, $rels, $p_ident, $primary_key) {
+	public function ExecJoin2($class, &$arr, $rels, $p_ident, $primary_key, $is_fake = false) {
 
 		$classS = $class;
 		$tableS = $p_ident.'__';
 
-		$obj = $this->UpdateObjectFromArray($arr, $classS, $primary_key, $tableS, true);        
+		$obj = $this->UpdateObjectFromArray($arr, $classS, $primary_key, $tableS, true, $is_fake);
 
 		if (!$obj) return NULL;
 
 		foreach ($rels as $pff) {
 			if (isset($pff['parent']) && $pff['parent'] == $p_ident) {
 				$field = $pff['name'];
-				$obj->$field = $this->ExecJoin2($pff['class'], $arr, $rels, $pff['ident'], $pff['primary_key']);  
+				$obj->$field = $this->ExecJoin2($pff['class'], $arr, $rels, $pff['ident'], $pff['primary_key']);
 			}
 		}
 		//$this->assembleOne($obj, 1);
 		$this->cache($obj);
-		return $obj;    
+		return $obj;
 	}
 
 	public function assembleAll($name, $depth = -1) {
