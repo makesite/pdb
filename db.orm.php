@@ -1800,7 +1800,7 @@ class ORM_Loader {
 			$page = round($page); if ($page < 1) $page = 1;
 			$quantity = round($quantity); if ($quantity <= 0) $quantity = 0;
 			if ($quantity)
-			    $this->limit = (($page-1) * $quantity) . ',' . $quantity; 
+				$this->limit = (($page-1) * $quantity) . ',' . $quantity;
 				//$q->LIMIT( (($page-1) * $quantity) . ',' . $quantity);
 		}
 	}
