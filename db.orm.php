@@ -1131,7 +1131,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 			if ($this->data) {
 				if (defined('HEAVY_DEBUG')) er($this->data);
 				if (defined('HEAVY_DEBUG')) er($ctx);
-				$ctx->assembleAll($this->model_class, 1);//$depth - 1);//$obj, $depth);
+				$ctx->assembleAll($this->model_class, $depth - 1);//$depth - 1);//$obj, $depth);
 				//$ctx->assembleOne($obj, $depth);//$obj, $depth);
 			}
 		}
