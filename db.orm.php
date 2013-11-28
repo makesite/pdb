@@ -1126,7 +1126,13 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 
 		return $this->loaded;
 	}
-
+	public function forceFilter($new_filter) {
+		if (!$this->filter) {
+			$this->filter = $new_filter;
+			return;
+		}
+		$this->filter($new_filter);
+	}
 	public function filter($new_filter) {
 		if ($this->loaded) throw new Exception('Changing filter in loaded collection is not allowed!');
 		if (!$this->filter) {
@@ -1157,6 +1163,10 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	public function one() {
 		if ($this->valid()) return $this->current();
 		return false;
+	}
+	public function chainLoad($p=null,$q=null,$d=-1) {
+		$this->load($p,$q,$d);
+		return $this;
 	}
 
 	public function loadFrom($entries) {
