@@ -1790,6 +1790,7 @@ class ORM_Loader {
 		}
 
 		$obj->autofields(true); // HACK -- autofields
+		$obj->autofields(false); // HACK -- autofields
 		//$this->cache($obj);
 		return $obj;
 	}
