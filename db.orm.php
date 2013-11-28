@@ -922,19 +922,13 @@ class ORM extends SINGLETON {
 			$agg = array('fields'=>array(), 'foreign'=>array(), 'primary'=>''); /* Agregate everything here */
 
 			//throw new Exception('No DocComment specifiying table name found for class "'.$class_name.'"');
-			if (isset($class_name::$table_name)) {
-				$agg['table'] = $class_name::$table_name;
-			} else
-			$agg['table'] = strtolower($class_name).'s';
-
 			$nprops = array();
 
-			if (isset($dummy)) {
-				$internal = $dummy->internal_reflection();
-				$nprops = $internal['fields'];
-				$agg['table'] = $internal['table'];
+			$agg['table'] = strtolower($class_name).'s';
+
+			if (isset($class_name::$table_name)) { /* Get from class */
+				$agg['table'] = $class_name::$table_name;
 			}
-			
 			if (isset($class_name::$_sql)) {
 				$nprops = $class_name::$_sql;
 
@@ -960,6 +954,12 @@ class ORM extends SINGLETON {
 
 					$nprops[$name] = $def;	
 				}
+			}
+
+			if (isset($dummy)) { /* Get from Object */
+				$internal = $dummy->internal_reflection();
+				if ($internal['fields']) $nprops = $internal['fields'];
+				if ($internal['table']) $agg['table'] = $internal['table'];
 			}
 
 			foreach ($nprops as $name=>$def) {
@@ -1513,9 +1513,8 @@ class ORM_Model {
 
 	public function internal_reflection() {
 		$agg = array(
-			'table' => isset($this->_table_name) ? $this->_table_name :
-				strtolower( get_class($this) ) . 's',
-			'fields' => isset($this->_sql) ? $this->_sql : array(),
+			'table' => isset($this->_table_name) ? $this->_table_name : null,
+			'fields' => isset($this->_sql) ? $this->_sql : null,
 			'primary' => null,
 			'foreign' => null,
 		);
