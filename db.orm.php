@@ -162,7 +162,7 @@ class ORM extends SINGLETON {
 		mkdir($tmp_dir);
 		mkdir($db_dir);
 		mkdir($payload_dir);
-		
+
 		if (is_string($classes)) $classes = array($classes);
 		if (!$classes) $classes = get_declared_classes();
 		foreach ($classes as $c) {
@@ -178,9 +178,9 @@ class ORM extends SINGLETON {
 					mkdir($payload_dir.'/'.$fileinfo, 0777, true);
 				}
 				copy($file['src'], $payload_dir.'/'.$file['dst']);
-				//er("Copy", 				$file['src'], $payload_dir.'/'.$file['dst']);
-			}			
-		}		
+				//er("Copy", $file['src'], $payload_dir.'/'.$file['dst']);
+			}
+		}
 
 		if (file_exists($tar_file)) unlink($tar_file);
 		$phar = new PharData($tar_file);
@@ -201,7 +201,7 @@ class ORM extends SINGLETON {
 		$payload_dir = $dir . '/payload';
 
 		$db_files = glob($db_dir . '/*.xml');
-    
+
 		foreach ($db_files as $db_file) {
 
 			$xmlstr = file_get_contents($db_file);
@@ -228,7 +228,7 @@ class ORM extends SINGLETON {
 						if (!rename($payload_dir.'/'.$file['src'], $file['dst'])) {
 							//failed;
 						}
-						//er("Copy", 	$fileinfo, $payload_dir.'/'.$file['src'],			$file['dst']);					
+						//er("Copy", $fileinfo, $payload_dir.'/'.$file['src'], $file['dst']);
 					}
 				}
 			}
@@ -289,7 +289,7 @@ class ORM extends SINGLETON {
 
 		if (isset($id)) {
 			$ref = ORM::get_reflection($name);
-			$obj = $loader_ctx->queryCache($name, $ref['primary'], $id); 		
+			$obj = $loader_ctx->queryCache($name, $ref['primary'], $id);
 
 			if (!$obj) {
 
@@ -360,7 +360,7 @@ class ORM extends SINGLETON {
 		if (!isset($map[$type])) throw new Exception("Undefined ORM-link type `$type`");
 		foreach ($map[$type] as $link) {
 			$name = $link['property'];
-			er($link, $object);
+			//er($link, $object);
 			$old[$name] = (property_exists($object, $name) ? $object->{$name} : null);
 		}
 		return $old;
@@ -369,7 +369,7 @@ class ORM extends SINGLETON {
 	public static function array_diff_obj($arr1, $arr2) {
 		if (!function_exists('compare_objects')) {
 		function compare_objects($obj_a, $obj_b) {
-		  return $obj_a->id() - $obj_b->id();
+			return $obj_a->id() - $obj_b->id();
 		} }
 		return array_udiff($arr1, $arr2, 'compare_objects');
 	}
@@ -393,8 +393,7 @@ class ORM extends SINGLETON {
 
 				$remote_obj = null;
 				$vmap = ORM::Map($via_class);
-			er("Has Many Via", $config);
-			er("VMAP:", "for ".$via_class, $vmap);
+
 				if ($config['single']) {
 					foreach ($vmap['autojoin'] as $vconfig) {
 						if ($vconfig['left'] == $config['middle']) {
@@ -404,7 +403,7 @@ class ORM extends SINGLETON {
 					}
 				} else {
 					foreach ($vmap['fastload'] as $vconfig) {
-					er("Compare", $vconfig['right'], "with", $config['right']);
+						//er("Compare", $vconfig['right'], "with", $config['right']);
 						if ($vconfig['right'] == $config['right']) {
 							$remote_obj = $vconfig['property'];
 							break;
@@ -413,13 +412,13 @@ class ORM extends SINGLETON {
 				}
 				if (!$remote_obj) throw new Exception("no autojoin property `$remote_field` in Map($via_class)");
 				if (!isset($object->$name)) continue;
-			//er("OLD", $old[$name]);
-			//er("NEW", $object->$name);
+				//er("OLD", $old[$name]);
+				//er("NEW", $object->$name);
 
 				$to_rem = self::array_diff_obj($old[$name], $object->$name);
 				$to_add = self::array_diff_obj($object->$name, $old[$name]);
-			er("TO ADD:", $to_add);
-			er("TO REM:", $to_rem);
+				//er("TO ADD:", $to_add);
+				//er("TO REM:", $to_rem);
 
 				$ref2 = self::get_reflection($via_class);
 				$ref3 = self::get_reflection($has_class);
@@ -429,14 +428,12 @@ class ORM extends SINGLETON {
 
 					//er("USING MANY VIA", $class, $name, $has_class, $via_class, $local_field, $remote_field, $remote_hasmany);
 
-
 					$power_keys = $ref2['foreign'][$has_class];
 
 					$power_key = key($power_keys);
 					$power_rkey = current($power_keys);
 
 					//er($power_keys);
-
 					//er("MUST DELETE $via_class WHERE $remote_field = ".$object->$local_field." AND $power_key = this.$local_field ".$oldobj->$power_rkey);
 
 					$col = ORM::Collection($via_class,
@@ -451,7 +448,6 @@ class ORM extends SINGLETON {
 				foreach ($to_add as $obj) {
 
 					//er("OBJ:", $obj);
-
 					//er("REF", $ref, "REF2", $ref2, "REF3", $ref3);
 					//er("HAS MANY VIA", $class, $name, $has_class, $via_class, $local_field, $remote_field, $remote_hasmany);
 
@@ -509,7 +505,7 @@ class ORM extends SINGLETON {
 		if (!isset(self::$mapping_cache[$class])) {
 
 			$obj = array(
-			    'auto' => array(),
+				'auto' => array(),
 				'autojoin' => array(),
 				'fastload' => array(),
 				'slowload' => array(),
@@ -613,21 +609,20 @@ class ORM extends SINGLETON {
 					$table = $ref['table'];
 
 					$subtable = $ref2['table'];
-//er("Looking for: ", $class, "VS", $subclass, "or ", $table, "VS", $subtable);
+					//er("Looking for: ", $class, "VS", $subclass, "or ", $table, "VS", $subtable);
 					$left_key = null;
 					$right_key = null;
-                    $relation = 'slave';
+					$relation = 'slave';
 
-                    $filters = isset($config[3]) ? $config[3] : null;
+					$filters = isset($config[3]) ? $config[3] : null;
 
-                    if (isset($ref2['foreign'][$table])) {
+					if (isset($ref2['foreign'][$table])) {
 						list ($right_key, $left_key) = each ( $ref2['foreign'][$table] );
 						$relation = 'master';
 					}
 					else if (isset($ref['foreign'][$subtable])) {
 						list ($left_key, $right_key) = each ( $ref['foreign'][$subtable] );
 					} else {
-						er("NO ref ie either", $ref, "nor", $ref2);
 						throw new Exception("Can't map $class::$left_key -- to $subclass object");
 					}
 
@@ -695,8 +690,8 @@ class ORM extends SINGLETON {
 					//echo "Has many $name via: -- {$config}<br>";
 					$has_class = key($config);
 					$via_class = $config[$has_class][0];
-					//echo " $has_class, via class $via_class "; 
-					$local_field = isset($config[$has_class][1]) ? $config[$has_class][1] : $field; 
+					//echo " $has_class, via class $via_class ";
+					$local_field = isset($config[$has_class][1]) ? $config[$has_class][1] : $field;
 					$remote_field = isset($config[$has_class][2]) ? $config[$has_class][2] : $field;
 					$remote_hasmany = isset($config[$has_class][3]) ? $config[$has_class][3] : $field;
 
@@ -790,7 +785,7 @@ class ORM extends SINGLETON {
 			$ret .= "\t\t".'<'.$name.'>' . self::xmlentities($object->$name) . '</'.$name.'>'."\n";
 		}
 		$pl = $object->onExport();
-		if ($pl) {		
+		if ($pl) {
 			$ret .= "\t\t".'<payload>'."\n";
 			foreach ($pl as $obj) {
 				$ret .= "\t\t\t".'<file>';
@@ -820,7 +815,6 @@ class ORM extends SINGLETON {
 		$class = get_class($object);
 		_debug_log("Inserting object $class");
 		$ref = self::get_reflection($class, $tmp, $object);
-		//print_r($ref);	exit;
 
 		ORM::Wrap($object);
 
@@ -883,7 +877,6 @@ class ORM extends SINGLETON {
 		$class = get_class($object);
 		_debug_log("Updating object $class");
 		$ref = self::get_reflection($class, $tmp, $object);
-		//print_r($ref);	exit;
 
 		ORM::Wrap($object);
 
@@ -907,12 +900,12 @@ class ORM extends SINGLETON {
 		$db = self::getDB();
 		//_debug_log("ORM Save:".print_r($q->toRun(),1));
 		$db->set ( $q->toRun() );
-		
+
 		return true;
 	}
 
 	private static function cache_add($key, $val) {
-		self::$static_cache[$key] = $val;	
+		self::$static_cache[$key] = $val;
 	//	self::$new_cache[] = 'self::$static_cache[\''.$key.'\'] = '. self::php_encode($val) .';'.PHP_EOL;
 	//	self::cache_flush();
 	}
@@ -933,7 +926,7 @@ class ORM extends SINGLETON {
 			throw new Exception("No such class ".$class_name);
 		}
 		if (!isset(self::$static_cache[$class_name])) {
-			$fresh = 1;	
+			$fresh = 1;
 			$agg = array('fields'=>array(), 'foreign'=>array(), 'primary'=>''); /* Agregate everything here */
 
 			//throw new Exception('No DocComment specifiying table name found for class "'.$class_name.'"');
@@ -952,7 +945,6 @@ class ORM extends SINGLETON {
 				if (isset($parent_class::$_sql))
 					$nprops = array_merge($parent_class::$_sql, $nprops);
 				}
-
 			} else
 			if (class_exists('ReflectionClass')) {
 				$ref = new ReflectionClass($class_name);
@@ -967,7 +959,7 @@ class ORM extends SINGLETON {
 					if ($def) $def = trim(substr($def, 3, strpos($def, '*', 3) - 3));
 					$name = $prop->name;
 
-					$nprops[$name] = $def;	
+					$nprops[$name] = $def;
 				}
 			}
 
@@ -993,7 +985,7 @@ class ORM extends SINGLETON {
 			$ref = null;/*
 			if (!$agg['primary']) {
 				$agg['primary'] = 'id';
-				$agg['fields']['id'] = 'MEDIUMINT(255) PRIMARY KEY AUTO_INCREMENT';        	        	
+				$agg['fields']['id'] = 'MEDIUMINT(255) PRIMARY KEY AUTO_INCREMENT';
 			}*/
 			self::cache_add($class_name, $agg);
 		}
@@ -1118,7 +1110,8 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	}
 
 	public function load($page = null, $quantity = null, $depth = -1) {
-		_debug_log("Loading collection <b>".$this->model_class."</b>");
+		//if ($this->loaded) return TRUE;
+		_debug_log("Loading collection <b>".$this->model_class."</b>, depth:".$depth);
 		//if (!isset($this->ctx_id)) $ctx = ORM::objectCacheAsLoader();
 
 		$ctx = ORM::Loader( $this->ctx_id );
@@ -1128,7 +1121,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 
 		$simple_filter = is_object($this->filter) ? $this->filter->asFilter() : $this->filter;
 
-		$this->data = $ctx->filterCache($this->model_class, $simple_filter); 		
+		$this->data = $ctx->filterCache($this->model_class, $simple_filter);
 
 		if (!$this->data) {
 
@@ -1224,9 +1217,9 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 
 	public function toXML($fields = array(), &$payload = null) {
 		$ret = '';
-		
+
 		$ref = ORM::get_reflection($this->model_class);
-		
+
 		$ret .= "".'<'. $ref['table'] . '>'."\n";
 		foreach ($this->data as $item) {
 			$ret .= ORM::ConvertToXML($item, $fields, $payload);
@@ -1236,11 +1229,10 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	}
 
 	public function save($fields=null) {
-		if (!$this->loaded) throw new Exception("Can't save unloaded ORM_Collection");
-		
+		if (!$this->loaded) throw new Exception('Can\'t save unloaded ORM_Collection');
 		$ref = ORM::get_reflection($this->model_class);
 
-		if ($fields != null)		
+		if ($fields != null)
 		foreach ($fields as $name)
 			if (!in_array($name, array_keys($ref['fields'])))
 				throw new Exception("Undefined field `".$name."` for class ".$this->model_class);
@@ -1328,16 +1320,16 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		{
 			$ids = array();
 			foreach ($this->data as $item) {
-			    $ids[] = $item->id(); 
-			    $item->onDelete();
+				$ids[] = $item->id();
+				$item->onDelete();
 			}
 			//er("Delete by id", $ids);
 			$q->WHERE('id');
-    		$q->IN($ids);
+			$q->IN($ids);
 
-    		if (!$ids) return false; /* do not delete empty id set */
-    	}
-    	else
+			if (!$ids) return false; /* do not delete empty id set */
+		}
+		else
 			if ($this->filter)
 				ORM_Loader::apply_filters($q, $this->filter);
 
@@ -1367,7 +1359,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	function valid() {
 		//var_dump(__METHOD__);
 		return isset($this->data[$this->position]);
- 	}
+	}
 
 	function count() {
 		if ($this->loaded) return count($this->data);
@@ -1440,6 +1432,7 @@ class ORM_Model {
 		$map = ORM::Map($class);
 
 		foreach ($map['auto'] as $name => $config) {
+
 			if (is_bool($config) && $config != $before_assemble) continue;
 			if (is_callable(array($this, $name.'_auto'))) {
 				$fnc = $name.'_auto';
@@ -1466,12 +1459,12 @@ class ORM_Model {
 			//this way we remove belongs_to too
 
 			$name = $has_one['property'];
-			$subclass = $has_one['class'];		
+			$subclass = $has_one['class'];
 			$key_property = $has_one['left'];
 			$field = $key_property;
-			
-			$table = $has_one['table'];			
-			
+
+			$table = $has_one['table'];
+
 			$ref2 = ORM::get_reflection($subclass);
 			$table = $ref2['table'];
 
@@ -1495,7 +1488,7 @@ class ORM_Model {
 				if (strtolower(get_class($subobj)) == strtolower($subclass)) {
 					$object->$field = $subobj->$subfield;
 					$ok = true;
-				} 
+				}
 			}
 			if (property_exists($object, $name) && $object->$name === NULL) {
 				$object->$field = 0;
@@ -1508,7 +1501,7 @@ class ORM_Model {
 			//$object->$field = 
 			//$object->$name = null;
 		}
-
+		//er($this);
 	}
 
 	public function assemble() { return $this->assemble2(null); }
@@ -1589,7 +1582,7 @@ class ORM_Loader {
 	private $heap = array(); /* Array of objects, classified by CLASS and ID */
 	//private $last = NULL;    /* pointer to last cached object, for speedup */
 	//public function one() {        return $this->last;    }
-    
+
 	public function __construct() {
 		$this->unique_id = ORM::uniqueId();
 	}
@@ -1650,7 +1643,7 @@ class ORM_Loader {
 				$q->WHERE(array_keys($filters));
 				$q->DATA($filters);
 			} else {
-			    // literal string
+				// literal string
 				$q->WHERE($filters);
 			}
 		}
@@ -1751,7 +1744,6 @@ class ORM_Loader {
                 }
             }
             if ($circular) continue;
-//...............
 
 			if ($has_one['relation'] == 'slave') {
 				//$primary_key = $has_one['left'];
@@ -1831,13 +1823,14 @@ class ORM_Loader {
 		if ($depth == 1 || (!$map['autojoin'] && !$map['hasonevia'])) {
 
 			$sql = $q->toRun();
+
 			$objects = $db->fetchObject( $sql , $class, array(false) );
 			if (!$objects) return false;
 
 			foreach ($objects as $obj)
-			{ 
-			    $this->cache($obj);
-			    $this->last_batch[] = $obj;
+			{
+				$this->cache($obj);
+				$this->last_batch[] = $obj;
 			}
 		}
 		// Left join load
@@ -1924,7 +1917,7 @@ class ORM_Loader {
 	public function assembleOne(&$object, $depth = -1, $fatal = true) {
 		if ($depth === 0) return;
 		$class = get_class($object);
-		$map = ORM::Map($class);	
+		$map = ORM::Map($class);
 
 		$object->autofields(true);
 
@@ -1943,7 +1936,7 @@ class ORM_Loader {
 
 			if (!isset($object->$foreign_property)) {
 				if (!$fatal) $object->$foreign_property = NULL;
-				else throw new Exception("Unable to add `$name` using {$has_one['relation']} $class's `$foreign_property`");
+				else throw new Exception("Unable to add property `$name` using {$has_one['relation']} $class's `$foreign_property`");
 			}
 
 			if (defined('HEAVY_DEBUG')) _debug_log(" $depth > 0 | $class [with $foreign_property={$object->$foreign_property}] ~{$has_one['relation']}~ $has_class($key_property={$object->$foreign_property}), mapped to field $class->$name ");
@@ -1966,7 +1959,7 @@ class ORM_Loader {
 				} else {
 					$object->$name = $link;
 					if (defined('HEAVY_DEBUG')) er("Now, let's assemble some more", $object->$name);
-					$this->assembleOne( $object->$name, $depth -1 );    		    
+					$this->assembleOne( $object->$name, $depth - 1 );
 				}
 
 			} else {
@@ -2013,19 +2006,19 @@ class ORM_Loader {
 			}
 
 			if ($filter) {
-			    $collection = new ORM_Collection($has_class, $filter, false);
-			    $collection->using($this);
+				$collection = new ORM_Collection($has_class, $filter, false);
+				$collection->using($this);
 				$object->$name = $collection;
 
 				if ($depth < 0 || $depth > 0) {
-				    //$this->load($has_class, $filter, $depth - 1);
-				    //$collection->load(null, null, $depth - 1);
+					//$this->load($has_class, $filter, $depth - 1);
+					//$collection->load(null, null, $depth - 1);
 				}
 			}
 			else if (!$fatal)
 				$object->$name = null;
 			else
-				throw new Exception("Unable to form $has_class using $filter");				
+				throw new Exception('Unable to form '.$has_class.' using '.$filter);
 		}
 
 		/* HAS MANY VIA */
@@ -2048,25 +2041,22 @@ class ORM_Loader {
 
 			$object->$name = NULL;
 
-			//er("Single", $config);
-			//er("<h1>Checkit</h1>");
+			//er("<h1>Config</h1>", $config);
 			//if (!($depth < 0 || $depth > 1)) continue;
 			$link = $this->queryCache($via_class, $remote_field, $object->$local_field); 
 
 			if (!$link) {
 				$filter = array($remote_field => $object->$local_field);
 				// * * *
-				// echo "Now load some more";
-				//er("'' $via_class '' Filter", $filter, "local field: $local_field");
+				//echo "Now load some more";
+				//er("'' $via_class '' Filter", $filter, "local field: $local_field, depth:", $depth - 1);
 				$this->load($via_class, $filter, $depth - 1);
 				$links = $this->filterCache($via_class, $filter, TRUE);
-				//
-				//er("LINKS:", $links, "/LINKS");
 			}
 			else {
 				$links = array($link);
 			}
-			//er("Lining", $links);
+
 			$ret = array();
 			foreach ($links as $link) {
 				//if (!isset($link->$remote_property)) $this->assembleOne($link, 2);
@@ -2077,11 +2067,9 @@ class ORM_Loader {
 				$ret[] = $link->$remote_property;
 			}
 			$object->$name = $ret;
-			//exit;
 		}
 
 		$object->autofields(false);
-		//er("RESULT", $object);
 	}
 
 	public function attach($object, $property) {
