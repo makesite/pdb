@@ -1319,8 +1319,12 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		if ($this->counted === FALSE) {
 			$table = ORM::getTable($this->model_class);
 
+			$ref = ORM::get_reflection($this->model_class);
+			$field = $ref['primary'];
+			if (!$field) $field = '*';
+
 			$q = new QRY();
-			$q->SELECT("COUNT(id)");
+			$q->SELECT('COUNT('.$field.')');
 			$q->FROM($table);
 			if ($this->filter)
 				ORM_Loader::apply_filters($q, $this->filter);
@@ -1331,7 +1335,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 			$res = $db->fetch( $sql );
 			//_debug_log("ORM count:".print_r($q->toRun(),1).print_r($res,1));
 			if ($res) {
-				$this->counted = $res[0]['COUNT(id)'];
+				$this->counted = $res[0]['COUNT('.$field.')'];
 			}
 		}
 		return $this->counted;
