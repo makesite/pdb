@@ -848,11 +848,10 @@ class ORM extends SINGLETON {
 		$new_id = $db->set ( $q->toRun() );
 		_debug_log("inserted and saving to cache (Id: $new_id)");
 		//$object->identify( $new_id );
-		//$object->{$object->reflection()->primary} = $new_id;
-		$object->{$ref['primary']} = $new_id;
+		if ($ref['primary'])
+			$object->{$ref['primary']} = $new_id;
 		//ORM::Cache($object);
 		//$object->prepare2(null, 1);
-		_debug_log("new id: $new_id");
 		return $new_id;
 	}
 
@@ -1043,7 +1042,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		/* SORT */
 		$id2index = $index_weight = array();
 		foreach ($this->data as $i=>$item)
-			$id2index[$item->id] = $i;
+			$id2index[$item->$primary] = $i;
 		foreach ($values as $i=>$val)
 			$index_weight[$id2index[$val]] = $i;
 		ksort($index_weight);
@@ -1765,7 +1764,7 @@ class ORM_Loader {
 		if (defined('HEAVY_DEBUG')) echo "</ul>";
 	}
 
-	private function UpdateObjectFromArray(&$array, $class_name, $primary, $prefix, $clear = FALSE) {
+	private function UpdateObjectFromArray(&$array, $class_name, $primary, $prefix, $clear = FALSE, $is_fake = FALSE) {
 		$primary_key = $prefix . $primary;
 		if (!array_key_exists($primary_key, $array)) throw new Exception("Unable to find key '$primary' with prefix '$prefix' in the obj.array".er($array,1)); 
 
@@ -1775,6 +1774,8 @@ class ORM_Loader {
 
 		$delets = array();
 		$obj = $this->queryCache($class_name, null, $id);
+		if ($is_fake) $obj = NULL;
+
 		if (!$obj) $obj = new $class_name(false);
 
 		foreach ($array as $key => $value) {
