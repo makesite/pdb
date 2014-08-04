@@ -628,6 +628,8 @@ class ORM extends SINGLETON {
 					else if (isset($ref['foreign'][$subtable])) {
 						list ($left_key, $right_key) = each ( $ref['foreign'][$subtable] );
 					} else {
+						$left_key = @$config[1];
+						$right_key = @$config[2];
 						throw new Exception("Can't map $class::$left_key -- to $subclass object");
 					}
 
@@ -712,6 +714,13 @@ class ORM extends SINGLETON {
 						isset($via_class::$has_one[$remote_hasmany])) {
 
 						list($tmp, $right_key) = each($via_class::$has_one[$remote_hasmany]);
+						$single = 1;
+					}
+					else if (isset($via_class::$belongs_to) &&
+						isset($via_class::$belongs_to[$remote_hasmany]) &&
+						isset($via_class::$belongs_to[$remote_hasmany][2])) {
+
+						$right_key = $via_class::$belongs_to[$remote_hasmany][1];
 						$single = 1;
 					}
 					else if (isset($via_class::$has_many) &&
