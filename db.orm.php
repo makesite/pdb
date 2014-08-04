@@ -1000,9 +1000,36 @@ class ORM extends SINGLETON {
 				$agg['primary'] = 'id';
 				$agg['fields']['id'] = 'MEDIUMINT(255) PRIMARY KEY AUTO_INCREMENT';
 			}*/
+
+			$expanded = array(); /* Expand macros */
+			foreach ($agg['fields'] as $name => $val) {
+				if (strpos($name, '@') !== false) {
+					preg_match('#@(\w+)#', $name, $mc);
+					$mname = $mc[1];
+					$sname = substr($name, 0, strlen($name) - strlen($mname) - 1);
+					$macro = ORM::GetMacro($mname);
+					foreach ($macro as $m) {
+						$expanded[$sname.($m ? '_'.$m : '')] = $val;
+					}
+				} else {
+					$expanded[$name] = $val;
+				}
+			}
+			$agg['fields'] = $expanded;
+
 			self::cache_add($class_name, $agg);
 		}
 		return self::$static_cache[$class_name];
+	}
+
+	public static function SetMacro($name, $vals) {
+		self::$static_cache['MACRO_'.$name] = $vals;
+	}
+	public static function GetMacro($name) {
+		if (!isset(self::$static_cache['MACRO_'.$name])) {
+			throw new Exception("Undefined macro `".$name."`");
+		}
+		return self::$static_cache['MACRO_'.$name];
 	}
 
 }
@@ -1594,6 +1621,29 @@ class ORM_Model {
 									array($this->reflection()->primary) );
 		return $this->ascription; 
 	}
+
+	public function macroExpand($macro, $fields = null, $source = '', $target = '') {
+		if (!$fields) $fields = $this;
+		$source = '_' . ltrim($source, '_');
+		if ($source == '_') $source = '';
+		$vals = ORM::GetMacro($macro);
+		foreach ($fields as $field => $value) {
+			if (substr($field, -strlen($target)) == $target) {
+				$short = substr($field, 0, strlen($field) - strlen($target));
+				$remote = $short . $source;
+				$value = $this->$remote;
+				$this->$field = $this->$remote;
+			}
+		}
+		foreach ($fields as $field => $value) {
+			if (substr($field, -strlen($source)) == $source) {
+				$short = substr($field, 0, strlen($field) - strlen($source));
+				$remote = $short . $target;
+				$this->$remote = $value;
+			}
+		}
+	}
+	public function translate($lang='en', $fields=null) { return $this->macroExpand('lang', $fields, $lang); }
 
 }
 
