@@ -481,9 +481,8 @@ class ORM extends SINGLETON {
 		$object->tear();
 	}
 
-	public static function Map($class = null) {
+	public static function Classes() {
 		static $class_list = null;
-		static $load_all = true;
 		if ($class_list === null) {
 			$class_list = array();
 			$all = get_declared_classes();
@@ -491,6 +490,12 @@ class ORM extends SINGLETON {
 				if (is_subclass_of($pclass, 'ORM_Model'))
 					$class_list[] = $pclass;
 		}
+		return $class_list;
+	}
+
+	public static function Map($class = null) {
+		static $load_all = true;
+		$class_list = ORM::Classes();
 		if ($class === null) {
 			if ($load_all) {
 				foreach ($class_list as $class)
