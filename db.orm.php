@@ -481,9 +481,8 @@ class ORM extends SINGLETON {
 		$object->tear();
 	}
 
-	public static function Map($class = null) {
+	public static function Classes() {
 		static $class_list = null;
-		static $load_all = true;
 		if ($class_list === null) {
 			$class_list = array();
 			$all = get_declared_classes();
@@ -491,6 +490,12 @@ class ORM extends SINGLETON {
 				if (is_subclass_of($pclass, 'ORM_Model'))
 					$class_list[] = $pclass;
 		}
+		return $class_list;
+	}
+
+	public static function Map($class = null) {
+		static $load_all = true;
+		$class_list = ORM::Classes();
 		if ($class === null) {
 			if ($load_all) {
 				foreach ($class_list as $class)
@@ -623,6 +628,8 @@ class ORM extends SINGLETON {
 					else if (isset($ref['foreign'][$subtable])) {
 						list ($left_key, $right_key) = each ( $ref['foreign'][$subtable] );
 					} else {
+						$left_key = @$config[1];
+						$right_key = @$config[2];
 						throw new Exception("Can't map $class::$left_key -- to $subclass object");
 					}
 
@@ -707,6 +714,13 @@ class ORM extends SINGLETON {
 						isset($via_class::$has_one[$remote_hasmany])) {
 
 						list($tmp, $right_key) = each($via_class::$has_one[$remote_hasmany]);
+						$single = 1;
+					}
+					else if (isset($via_class::$belongs_to) &&
+						isset($via_class::$belongs_to[$remote_hasmany]) &&
+						isset($via_class::$belongs_to[$remote_hasmany][2])) {
+
+						$right_key = $via_class::$belongs_to[$remote_hasmany][1];
 						$single = 1;
 					}
 					else if (isset($via_class::$has_many) &&
@@ -986,9 +1000,36 @@ class ORM extends SINGLETON {
 				$agg['primary'] = 'id';
 				$agg['fields']['id'] = 'MEDIUMINT(255) PRIMARY KEY AUTO_INCREMENT';
 			}*/
+
+			$expanded = array(); /* Expand macros */
+			foreach ($agg['fields'] as $name => $val) {
+				if (strpos($name, '@') !== false) {
+					preg_match('#@(\w+)#', $name, $mc);
+					$mname = $mc[1];
+					$sname = substr($name, 0, strlen($name) - strlen($mname) - 1);
+					$macro = ORM::GetMacro($mname);
+					foreach ($macro as $m) {
+						$expanded[$sname.($m ? '_'.$m : '')] = $val;
+					}
+				} else {
+					$expanded[$name] = $val;
+				}
+			}
+			$agg['fields'] = $expanded;
+
 			self::cache_add($class_name, $agg);
 		}
 		return self::$static_cache[$class_name];
+	}
+
+	public static function SetMacro($name, $vals) {
+		self::$static_cache['MACRO_'.$name] = $vals;
+	}
+	public static function GetMacro($name) {
+		if (!isset(self::$static_cache['MACRO_'.$name])) {
+			throw new Exception("Undefined macro `".$name."`");
+		}
+		return self::$static_cache['MACRO_'.$name];
 	}
 
 }
@@ -1580,6 +1621,29 @@ class ORM_Model {
 									array($this->reflection()->primary) );
 		return $this->ascription; 
 	}
+
+	public function macroExpand($macro, $fields = null, $source = '', $target = '') {
+		if (!$fields) $fields = $this;
+		$source = '_' . ltrim($source, '_');
+		if ($source == '_') $source = '';
+		$vals = ORM::GetMacro($macro);
+		foreach ($fields as $field => $value) {
+			if (substr($field, -strlen($target)) == $target) {
+				$short = substr($field, 0, strlen($field) - strlen($target));
+				$remote = $short . $source;
+				$value = $this->$remote;
+				$this->$field = $this->$remote;
+			}
+		}
+		foreach ($fields as $field => $value) {
+			if (substr($field, -strlen($source)) == $source) {
+				$short = substr($field, 0, strlen($field) - strlen($source));
+				$remote = $short . $target;
+				$this->$remote = $value;
+			}
+		}
+	}
+	public function translate($lang='en', $fields=null) { return $this->macroExpand('lang', $fields, $lang); }
 
 }
 
