@@ -283,6 +283,9 @@ class db_PDO {
 	}
 
 	/* SQL-SYNC Api. Extend this class to get it. */
+	public function clear_cache($table_name) {
+		unset($this->known_tables[$table_name]);
+	}
 	protected function describe_table($table_name) {
 
 		/* Try the mini-cache first */

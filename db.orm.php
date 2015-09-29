@@ -129,6 +129,7 @@ class ORM extends SINGLETON {
 			$class_table = self::getTable($c);
 			$ref = self::get_reflection($c);
 
+			$db->clear_cache($class_table);
 			$ret[$c] = $db->sync_table($class_table, $ref['fields'], $dry);
 		}
 		return $ret;
