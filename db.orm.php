@@ -1073,6 +1073,8 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		else $this->using( ORM::objectCacheAsLoader() ); 
 	}
 
+	public function getModelClass() { return $this->model_class; }
+
 	public function loaded() {
 		return $this->loaded ? TRUE : FALSE ;
 	}
@@ -1093,7 +1095,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		if ($reset === true) {
 			$initials = array();
 			foreach ($this->data as $item)
-				$initials[] = int($item->{$by}); 
+				$initials[] = (int)$item->{$by};
 		}
 
 		/* SORT */
@@ -1426,7 +1428,7 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 	}
 
 	function count() {
-		if ($this->loaded) return count($this->data);
+		if ($this->loaded) $this->counted = count($this->data);
 		if ($this->counted === FALSE) {
 			$table = ORM::getTable($this->model_class);
 
@@ -1503,6 +1505,7 @@ class ORM_Model {
 				$this->$name = $this->$fnc();
 			}
 			else if (is_string($config)) {
+				if ($config === '' && isset($this->$name)) continue;
 				$this->$name = str_replace('*', $this->id(), $config);
 			}
 			else {
