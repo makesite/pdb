@@ -1000,6 +1000,7 @@ class ORM extends SINGLETON {
 			foreach ($nprops as $name=>$def) {
 				$foreign = '';
 				if (!$def) $def = 'TEXT';
+				if ($def == 'TIMESTAMP') $def = 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP';//yikes
 //				if (!$def) throw new Exception('Unproperly formatted DocComment for property '.$prop->name.' in class '. get_class($this));
 				if (stripos($def, 'PRIMARY')) $agg['primary'] = $name;
 				if (($l = stripos($def, 'FOREIGN'))) {

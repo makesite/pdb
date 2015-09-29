@@ -294,20 +294,29 @@ class db_PDO {
 
 		$exists = (($tmp = 
 			$this->get("SHOW TABLES LIKE '".$table_name."';")) ? sizeof($tmp): 0);
-		if (!$exists) return NULL; 	
+		if (!$exists) return NULL;
 
 		/* Ask the DB */
 		$fields = $this->get("DESCRIBE " . $table_name);
-		$desc = array();	
+
+		$desc = array();
 		foreach ($fields as $field_x) {
 			$field = (array) $field_x;
 			$key = $field['Field'];
 			$val = strtoupper($field['Type']);
+			if ($field['Default'] === null)
 			$val .= ( strpos($field['Null'], 'NO') !== false ? " NOT NULL" : "" );
 			$val .= ( strpos($field['Key'], 'PRI') !== false ? " PRIMARY KEY" : "" );
 			$val .= ( strpos($field['Key'], 'UNI') !== false ? " UNIQUE" : "" );
 			$val .= ( strpos($field['Key'], 'MUL') !== false ? " INDEX" : "" );
+			if (strtoupper($field['Type']) == 'TIMESTAMP'
+			|| $field['Default'] !== null) {
+				if (strpos($field['Default'], ' ') !== false) $q = "'"; else $q = '';
+				$val .= " DEFAULT " . $q . ($field['Default'] === null ? "NULL" : $field['Default']) . $q;
+			}
 			$val .= ( strpos($field['Extra'], 'auto_increment') !== false ? " AUTO_INCREMENT" : "" );
+			$val .= ( strpos($field['Extra'], 'on update') !== false ? " ".$field['Extra'] : "" );
+
 			$desc[$key] = $val;
 		}
 
