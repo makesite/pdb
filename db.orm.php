@@ -1929,7 +1929,7 @@ class ORM_Loader {
 		// Left join load
 		else {
 			// Prepare SQL query with multiple LEFT JOINs
-			$tmp = array(array('ident'=>$ref['table'], 'class'=>$class, 'primary_key'=>$ref['primary'], 'name'=>NULL));
+			$tmp = array(array('ident'=>$db->_prefix().$ref['table'], 'class'=>$class, 'primary_key'=>$ref['primary'], 'name'=>NULL));
 
 			$this->PrepareJoin2($class, $q,  $depth, 0, 'master', $tmp);
 
