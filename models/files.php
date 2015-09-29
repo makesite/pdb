@@ -570,22 +570,35 @@ class File extends ORM_Model {
 			$fin_width = $twidth;
 			$fin_height = $theight;
 
+			$src_x = 0;
+			$src_y = 0;
+
 			if ($eforce) {
-			    // disabled
+				$y_proc = 0;
+				$x_proc = 0;
+
+				// disabled
 				if ($theight < $force_y) {
 					$off_y = ($force_y - $theight) / 2;
 					$fin_height = $force_y;
-					//$theight = $force_y; 
+					//$theight = $force_y;
+					//$y_proc = ($h / $theight) * $off_y;
 				}
 				if ($twidth < $force_x) {
 					$off_x = ($force_x - $twidth) / 2;
 					$fin_width = $force_x;
 					//$twidth = $force_x; 
+					//$x_proc = ($w / $twidth) * $off_x;
 				}
+
+				$w -= $y_proc;
+				$h -= $x_proc;
+
+				$src_y += $x_proc;
+				$src_x += $y_proc;
 			}
 
-			$src_x = 0;
-			$src_y = 0;
+
 			//Fit Crop
 			if ($eforce == 2) {
 				$x_proc = ($w / $twidth) * $off_x;
@@ -657,6 +670,9 @@ class File extends ORM_Model {
 
 	public function asThumb($max_w = 320, $max_h = 240, $crop = FALSE, $filter = '', $fmt = null) {
 		$root = File::work_dir();
+
+		$max_w = round($max_w);
+		$max_h = round($max_h);
 
 		$folder = $filter.'thumbs_'.$max_w.'x'.$max_h;
 
