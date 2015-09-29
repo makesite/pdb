@@ -328,14 +328,13 @@ class db_PDO {
 	}
 
 	protected function diff_table($old_values, $values, $table = '#__', $widen = TRUE, $save = TRUE) {
-
 		$desc = array();
 
 		/* Return value */
 		$sql = array();
 
 		if ($old_values) { /* Possible Alter */
-			$old_keys = array_keys($old_values);		
+			$old_keys = array_keys($old_values);
 			$new_keys = array_keys($values);
 
 			$del_keys = array_diff($old_keys, $new_keys);
@@ -459,8 +458,8 @@ _debug_log("ALTER-SQL:".print_r($sql,1));
 		$from_name = $mc1[1];
 		$from_size = $mc1[2];
 		$from_rest = $mc1[3];
-		
-			$nval = $to;
+
+		$nval = $to;
 		/* Always stay as 'TEXT' */
 		if ($to_name == 'TEXT' || $from_name == 'TEXT') {
 			$nval = 'TEXT';
@@ -487,7 +486,7 @@ _debug_log("ALTER-SQL:".print_r($sql,1));
 		}
 		return $nval.$to_rest;
 	}
-	
+
 	public function report() {
 		$this->report['execs'] = $this->report['queries'] - $this->report['fetches'];
 		return $this->report;

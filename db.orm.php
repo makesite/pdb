@@ -1189,7 +1189,6 @@ class ORM_Collection implements Iterator, Countable, ArrayAccess {
 		$this->data = $ctx->filterCache($this->model_class, $simple_filter);
 
 		if (!$this->data) {
-
 			$ctx->load($this->model_class, $this->filter, $depth);
 			$this->data = $ctx->last_batch;
 
@@ -1633,7 +1632,7 @@ class ORM_Model {
 	/* Utility */
 	public function identify($id) { $this->{$this->reflection()->primary} = $id;
 		$this->assemble2(null); }
-	public function id() { $p = $this->reflection()->primary; return isset($this->{$p}) ? $this->{$p} : null;	}
+	public function id() { $p = $this->reflection()->primary; return isset($this->{$p}) ? $this->{$p} : null; }
 	public function describe() {		return $this->reflection()->fields;	}
 	public function ascribe() {
 		if (!$this->ascription) $this->ascription = array_diff(array_keys($this->describe()),
