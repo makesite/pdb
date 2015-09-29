@@ -102,7 +102,7 @@ class db_PDO {
 
 	public function __construct($conf) {
 		$lazy = array('utf', 'type', 'host', 'login', 'pass', 'base', 'prefix', 'persist');
-		foreach ($lazy as $lazy_one) if (!isset($conf[$lazy_one])) throw new Exception ('No ->' .$lazy_one . ' property in array passed as pdo config!'); 
+		foreach ($lazy as $lazy_one) if (!isset($conf[$lazy_one])) throw new Exception ('No ->' .$lazy_one . ' property in array passed as pdo config!');
 		$conf['dsn'] = $conf['type'].':host='.$conf['host'].";dbname=".$conf['base'];
 		$conf['flags'] = ($conf['utf'] ? array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8") : array());
 		$pdo = new PDO($conf['dsn'], $conf['login'], $conf['pass'], $conf['flags']);

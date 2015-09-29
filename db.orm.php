@@ -115,7 +115,6 @@ class ORM extends SINGLETON {
 
 	public static function Sync($classes = null, $dry = false) {
 		$db = self::getDB();//Ensure db is on
-		_debug_log("Sync all tables...");
 		if (is_string($classes)) $classes = array($classes);
 		if (!$classes) $classes = get_declared_classes();
 		$ret = array();
@@ -1785,7 +1784,7 @@ class ORM_Loader {
             $moved ++;
 
             //er("[", $map2['autojoin'], "]");
-            if (defined('HEAVY_DEBUG')) er("+JOIN", $has_one, "TEST IDENT:".$test_ident, "DIR:".$dir,"LAST DEEP:".$last_deep,"REAL LAST DEEP:".$real_last_deep);
+//            if (defined('HEAVY_DEBUG')) er("+JOIN", $has_one, "TEST IDENT:".$test_ident, "DIR:".$dir,"LAST DEEP:".$last_deep,"REAL LAST DEEP:".$real_last_deep);
             $related = false;
             foreach ($rels as $rel) {
                 if (defined('HEAVY_DEBUG')) echo "<li>[$test_ident] Is it circular to ".print_r($rel,1);
