@@ -493,6 +493,35 @@ class ORM extends SINGLETON {
 		return $class_list;
 	}
 
+	public static function Collect($class, $property) {
+		$arr = array();
+		if (isset($class::$$property)) {
+			$arr = $class::$$property;
+		}
+
+		$parent_class = $class;
+		while (($parent_class = get_parent_class($parent_class)) != false) {
+			if (isset($parent_class::$$property))
+				$arr = array_merge($parent_class::$$property, $arr);
+		}
+
+		$expanded = array(); /* Expand macros */
+		foreach ($arr as $name => $val) {
+			if (strpos($name, '@') !== false) {
+				preg_match('#@(\w+)#', $name, $mc);
+				$mname = $mc[1];
+				$sname = substr($name, 0, strlen($name) - strlen($mname) - 1);
+				$macro = ORM::GetMacro($mname);
+				foreach ($macro as $m) {
+					$expanded[$sname.($m ? '_'.$m : '')] = $val;
+				}
+			} else {
+				$expanded[$name] = $val;
+			}
+		}
+		return $expanded;
+	}
+
 	public static function Map($class = null) {
 		static $load_all = true;
 		$class_list = ORM::Classes();
@@ -518,15 +547,7 @@ class ORM extends SINGLETON {
 			);
 
 			/* AUTO-FIELDS */
-			$auto = array();
-			if (isset($class::$_auto)) {
-				$auto = $class::$_auto;
-			}
-			$parent_class = $class;
-			while (($parent_class = get_parent_class($parent_class)) != 'ORM_Model') {
-				if (isset($parent_class::$_auto))
-					$auto = array_merge($parent_class::$_auto, $auto);
-			}
+			$auto = ORM::Collect($class, '_auto');
 			$obj['auto'] = $auto;
 
 			/* BELONGS TO */
@@ -951,13 +972,7 @@ class ORM extends SINGLETON {
 				$agg['table'] = $class_name::$table_name;
 			}
 			if (isset($class_name::$_sql)) {
-				$nprops = $class_name::$_sql;
-
-				$parent_class = $class_name;
-				while (($parent_class = get_parent_class($parent_class)) != 'ORM_Model') {
-				if (isset($parent_class::$_sql))
-					$nprops = array_merge($parent_class::$_sql, $nprops);
-				}
+				$nprops = ORM::Collect($class_name, '_sql');
 			} else
 			if (class_exists('ReflectionClass')) {
 				$ref = new ReflectionClass($class_name);
