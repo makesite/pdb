@@ -16,23 +16,30 @@ class DeepPage extends ORM_Model {
 
 	static $table_name = "pages";
 	static $_sql = array(
-		'id'    	=> 'MEDIUMINT(9) PRIMARY KEY AUTO_INCREMENT',
-		'title' 	=> 'VARCHAR(1024)',
-		'description'	=> 'TEXT',
-		'slug'  	=> 'VARCHAR(255)',
-		'parent_id'	=> 'MEDIUMINT(9) NOT NULL',
+		'id'		=> 'MEDIUMINT(9) PRIMARY KEY AUTO_INCREMENT',
+		'parent_id'	=> 'INT(9) FOREIGN KEY REFERENCES pages(id) NOT NULL',
+		'title@lang'	=> 'VARCHAR(1024)',
+		'description@lang'=> 'TEXT',
+		'slug'		=> 'VARCHAR(255)',
 		'on_menu'	=> 'SMALLINT(2)',
-		'subtitle'	=> 'VARCHAR(1024)',
-		'intro'		=> 'TEXT',
+		'subtitle@lang'	=> 'VARCHAR(1024)',
+		'intro@lang'	=> 'TEXT',
 		'priority'	=> 'MEDIUMINT(9) NOT NULL',
+		'meta_keywords@lang'    => 'VARCHAR(1024)',
+		'meta_description@lang' => 'VARCHAR(1024)',
 	);
 
+	static $_columns = array(
+		'title' => '',
+		'onmenuHTML' => '',
+		'num_subpagesHTML' => '',
+	);
 	static $_form = array(
-		'title' => 'text `Название`',
-		'description' => 'textarea `Содержание`',
-		'priority' => 'number `Приоритет`',
-		'slug' => 'text `имя-в-URL`',
-		'on_menu' => 'radio `Меню`',
+		'title@lang' => 'text `Title`',
+		'description@lang' => 'textarea `Content`',
+		'priority' => 'number `Priority`',
+		'slug' => 'text `Slug`',
+		'on_menu' => 'radio `Menu`',
 		'onmenuHTML' => false,
 		'menuCLASS' => false,
 		'adminHref' => false,
@@ -40,18 +47,23 @@ class DeepPage extends ORM_Model {
 		'href'=> '',
 		'teaserIdHTML' => false,
 		'idHTML' => false,
-		'parent_id' => 'select `Категория` @teaser',
-		'subtitle' => 'text `Субтитул` @teaser',
-		'intro' => 'textarea `Минитекст` @teaser',
+		'parent_id' => 'select `Category` @teaser',
+		'parent' => false,
+		'subtitle@lang' => false,//'text `Subtitle` @teaser',
+		'intro@lang' => false,//'textarea `Intro text` @teaser',
+		'meta_keywords@lang' => 'text `SEO Keywords` @teaser',
+		'meta_description@lang' => 'textarea `SEO Description` @teaser',
+
+		'subpages' => false,
 	);
 
-	static $has_one = array(
-		//'parent' => array('DeepPage', 'id', 'parent_id'),
+	static $belongs_to = array(
+		'parent' => array('DeepPage', 'parent_id', 'id'),
 	);
 
 	static $has_many = array(
 		'pictures' => array('PagePicture'),
-		//'children' => array('DeepPage', 'id', 'parent_id'),
+		'subpages' => array('DeepPage', 'parent_id', 'id'),
 	);
 
 	static $_auto = array(
@@ -68,8 +80,8 @@ class DeepPage extends ORM_Model {
 	);
 
 	public $on_menu_peers = array(
-		array('name' => 'None', 'value' => '0', 'selected' => '1'),
-		array('name' => 'Main', 'value' => '1', 'selected' => '0'),
+		array('name' => 'None', 'value' => '0', 'selected' => null),
+		array('name' => 'Main', 'value' => '1', 'selected' => null),
 	);
 	public function on_menu_auto() {
 		foreach ($this->on_menu_peers as $i=>$peer) {
@@ -102,20 +114,21 @@ class DeepPage extends ORM_Model {
 		return 'page_'.$this->id;
 	}
 	public function href_auto() {
+		if (isset($this->parent)) { }
 		if ($this->slug) return $this->slug;
 		return 'page/'.$this->id;
 	}
 	public function onmenuHTML_auto() {
 		if (!isset($this->on_menu_peers[$this->on_menu])) return '✗'; 
 		$peer = $this->on_menu_peers[$this->on_menu];
-		return $peer['name'] . " меню";
-		//return $this->on_menu ? '✔' : '✗';
+		//return $peer['name'] . ($this->on_menu ? " menu" : "");
+		return $this->on_menu ? '✔' : '✗';
 	}
 
 	public function coverUrl_auto() {
 		if (isset($this->pictures[0])) {
 			//return $this->pictures[0]->asThumb(60, 60, TRUE, 'greyscale');//small photo
-			return $this->pictures[0]->thumbUrl_auto();
+			return $this->pictures[0]->getUrl('admin_list_thumb');
 		}
 		return '';
 	}
@@ -129,16 +142,37 @@ class DeepPage extends ORM_Model {
 		$c = get_called_class();
 		$pages = $c::GetAll();
 		$peers = array();
-		$peers[] = array('name' => '(Нет)', 'value' => '0', 'selected' => 
+		$peers[] = array('name' => '(None)', 'value' => '0', 'selected' =>
 			(0 == $this->parent_id ? 1 : 0)
 		);
 		foreach ($pages as $page) {
 			if ($page->id == $this->id) continue;
-			$peers[] = array('name' => $page->title, 'value' => $page->id, 'selected' => 
+			$peers[] = array('name' => $page->title, 'value' => $page->id, 'selected' =>
 				($page->id == $this->parent_id ? 1 : 0)
 			);
 		}
 		return $peers;
+	}
+
+	/* Not so auto, as this is intensive */
+	public function loadSubPages() {
+		$this->subpages->order_by('priority');
+		$this->subpages->load();
+		$this->num_subpages = $this->subpages->count();
+		$this->num_subpagesHTML = $this->num_subpages;
+		if (!$this->num_subpagesHTML) $page->num_subpagesHTML='';
+		$this->subpagesTXT = '';
+		foreach ($this->subpages as $subpage) {
+			$this->subpagesTXT .= $subpage->title . "; \n";
+		}
+	}
+
+	static function isChildOf($page, $other_page) {
+		while ($page) {
+			if ($page->parent_id == $other_page->id) return true;
+			$page = $page->parent;
+		}
+		return false;
 	}
 
 	static public function GetAll() {
@@ -148,17 +182,6 @@ class DeepPage extends ORM_Model {
 		}
 		return $cache;
 	}
-/*
-	static function SetTeaser($obj) {
-		$query = 'UPDATE '.ORM::getTable('Article').' SET is_teaser = 0 WHERE is_teaser = ? AND id <> ?';
-		$sql[$query] = array( $obj->is_teaser, $proj->id );
-
-		$db = ORM::getDB();
-		$db->run($sql);
-
-		return true;
-	}
-*/
 }
 
 ?>
